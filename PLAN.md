@@ -1399,66 +1399,6 @@ export default function RecommendationList() {
 
 ---
 
-## Example .env Files
-
-**File: `senergy-api/.env.example`**
-
-```bash
-# Server
-NODE_ENV=development
-PORT=3000
-API_URL=http://localhost:3000
-
-# Firebase
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY=your-private-key
-FIREBASE_CLIENT_EMAIL=your-email@project.iam.gserviceaccount.com
-FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
-
-# Authentication
-JWT_SECRET=your-super-secret-jwt-key-min-32-chars-long
-JWT_EXPIRY=7d
-
-# Google Places
-GOOGLE_PLACES_API_KEY=your-google-places-api-key
-
-# ML Service
-ML_SERVICE_URL=http://localhost:8000
-ML_API_KEY=your-ml-api-key
-
-# Discord
-DISCORD_BOT_TOKEN=your-discord-bot-token
-DISCORD_CLIENT_ID=your-client-id
-
-# Environment
-FRONTEND_URL=http://localhost:3000
-```
-
-**File: `senergy-ml/.env.example`**
-
-```bash
-# ML Service
-ENVIRONMENT=development
-PORT=8000
-API_KEY=your-ml-api-key
-
-# Firebase
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY=your-private-key
-FIREBASE_CLIENT_EMAIL=your-email@project.iam.gserviceaccount.com
-FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
-
-# Model
-MODEL_PATH=./models/latest_model.h5
-TRAINING_BATCH_SIZE=32
-EPOCHS=20
-VALIDATION_SPLIT=0.2
-
-# Logging
-LOG_LEVEL=info
-```
-
----
 
 ## Database Schema (Firebase Realtime)
 
@@ -1557,7 +1497,7 @@ firebase_project/
 - [ ] Set up Python ML project
 - [ ] Create Firebase project
 - [ ] Set up GitHub Actions workflows
-- [ ] Deploy skeleton apps to Vercel/Railway
+- [ ] Deploy skeleton apps to netlify
 - **Deliverable:** 3 services can start and connect to Firebase
 
 **Days 3-5: Auth System**
@@ -1737,5 +1677,5 @@ npm run dev
 | **Machine Learning** | Python + TensorFlow + FastAPI | Prediction model, training, feature engineering |
 | **Discord Bot** | discord.js + TypeScript | Commands, community engagement |
 | **Database** | Firebase Realtime DB | All user, rating, place, community data |
-| **Hosting** | Vercel + Railway + Google Cloud | Deploy frontend, backend, ML service |
+| **Hosting** | netlify + Google Cloud | Deploy frontend, backend, ML service |
 

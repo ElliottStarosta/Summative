@@ -1,0 +1,284 @@
+import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/context/AuthContext'
+import axios from 'axios'
+import gsap from 'gsap'
+
+interface QuizQuestion {
+  id: number
+  text: string
+  weight: number
+  reverse?: boolean
+}
+
+export const Quiz: React.FC = () => {
+  const navigate = useNavigate()
+  const { token } = useAuth()
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const [questions, setQuestions] = useState<QuizQuestion[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [responses, setResponses] = useState<number[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [results, setResults] = useState<any>(null)
+
+  // Fetch questions from API
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const response = await axios.get('/api/quiz/questions', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        setQuestions(response.data)
+        setResponses(new Array(response.data.length).fill(0))
+        setLoading(false)
+      } catch (error) {
+        console.error('Failed to load questions:', error)
+        alert('Failed to load quiz questions. Please refresh the page.')
+        setLoading(false)
+      }
+    }
+
+    if (token) {
+      fetchQuestions()
+    }
+  }, [token])
+
+  useEffect(() => {
+    if (containerRef.current) {
+      gsap.fromTo(
+        containerRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.4, ease: 'power2.out' }
+      )
+    }
+  }, [currentQuestion, showResults])
+
+  const handleResponse = (value: number) => {
+    const newResponses = [...responses]
+    newResponses[currentQuestion] = value
+    setResponses(newResponses)
+
+    // Auto-advance to next question after selection
+    setTimeout(() => {
+      if (currentQuestion < questions.length - 1) {
+        setCurrentQuestion(currentQuestion + 1)
+      }
+    }, 300)
+  }
+
+  const handleSubmit = async () => {
+    if (responses.some((r) => r === 0)) {
+      alert('Please answer all questions before submitting')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await axios.post(
+        '/api/quiz/submit',
+        { responses },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      setResults(response.data)
+      setShowResults(true)
+
+      // Auto-redirect after showing results
+      setTimeout(() => {
+        navigate('/dashboard')
+      }, 3000)
+    } catch (error) {
+      alert('Failed to submit quiz. Please try again.')
+      setIsSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50 flex items-center justify-center">
+        <div className="text-center">
+          <i className="fas fa-spinner fa-spin text-4xl text-primary-600 mb-4" />
+          <p className="text-neutral-600">Loading quiz...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const progress = ((currentQuestion + 1) / questions.length) * 100
+  const question = questions[currentQuestion]
+
+  if (showResults && results) {
+    return (
+      <div
+        ref={containerRef}
+        className="min-h-screen bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50 flex items-center justify-center p-4"
+      >
+        <div className="w-full max-w-md text-center">
+          {/* Success Icon */}
+          <div className="mb-8">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent-400 to-accent-500 flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-check text-white text-3xl" />
+            </div>
+
+            <h1 className="text-4xl font-bold text-neutral-900 mb-2">Great!</h1>
+            <p className="text-neutral-500 mb-8">Your personality profile is ready</p>
+          </div>
+
+          {/* Results Card */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+            <div className="text-5xl font-bold text-primary-600 mb-3">
+              {results.adjustmentFactor.toFixed(2)}
+            </div>
+            <div className="text-2xl font-semibold text-neutral-900 mb-2">
+              {results.personalityType}
+            </div>
+            <p className="text-neutral-600 text-sm leading-relaxed">
+              {results.description}
+            </p>
+
+            {/* Adjustment Factor Scale */}
+            <div className="mt-8 pt-8 border-t border-neutral-200">
+              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">
+                Energy Scale
+              </p>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-neutral-600">Introvert</span>
+                <span className="text-xs text-neutral-600">Extrovert</span>
+              </div>
+              <div className="h-2 bg-gradient-to-r from-primary-300 via-primary-500 to-accent-400 rounded-full relative">
+                <div
+                  className="w-3 h-3 bg-white border-2 border-primary-600 rounded-full absolute top-1/2 transform -translate-y-1/2 shadow-md"
+                  style={{
+                    left: `calc(${((results.adjustmentFactor + 1) / 2) * 100}% - 6px)`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Redirecting Message */}
+          <p className="text-neutral-500 text-sm">
+            <i className="fas fa-spinner fa-spin mr-2" />
+            Redirecting to dashboard...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="min-h-screen bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50 flex items-center justify-center p-4"
+    >
+      <div className="w-full max-w-2xl">
+        {/* Progress */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-semibold text-neutral-600">
+                Question {currentQuestion + 1} of {questions.length}
+              </p>
+              <h2 className="text-3xl font-bold text-neutral-900 mt-1">Know Yourself</h2>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-primary-600">{Math.round(progress)}%</div>
+              <p className="text-xs text-neutral-500">Complete</p>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full h-2 bg-neutral-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary-500 to-accent-400 transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Question Card */}
+        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+          {/* Question Text */}
+          <h3 className="text-2xl font-bold text-neutral-900 mb-8 leading-tight">
+            {question.text}
+          </h3>
+
+          {/* Scale Labels */}
+          <div className="flex justify-between text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-6">
+            <span>Strongly Disagree</span>
+            <span>Neutral</span>
+            <span>Strongly Agree</span>
+          </div>
+
+          {/* Response Options */}
+          <div className="flex gap-3 mb-8">
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                onClick={() => handleResponse(value)}
+                className={`flex-1 py-4 px-2 rounded-lg font-semibold transition-all transform ${
+                  responses[currentQuestion] === value
+                    ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg scale-105'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                }`}
+              >
+                <div className="text-lg mb-1">{value}</div>
+                <div className="text-xs">
+                  {value === 1 && 'Strongly\nDisagree'}
+                  {value === 2 && 'Disagree'}
+                  {value === 3 && 'Neutral'}
+                  {value === 4 && 'Agree'}
+                  {value === 5 && 'Strongly\nAgree'}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Description */}
+          <p className="text-sm text-neutral-500 text-center">
+            {responses[currentQuestion] === 0
+              ? 'Select your response to continue'
+              : 'Next question will appear automatically'}
+          </p>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex gap-4">
+          <button
+            onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
+            disabled={currentQuestion === 0}
+            className="flex-1 py-3 bg-neutral-100 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <i className="fas fa-chevron-left" />
+            Previous
+          </button>
+
+          {currentQuestion === questions.length - 1 && responses.every((r) => r !== 0) ? (
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex-1 py-3 bg-gradient-to-r from-accent-400 to-accent-500 text-white font-semibold rounded-lg hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSubmitting && <i className="fas fa-spinner fa-spin" />}
+              {isSubmitting ? 'Submitting...' : 'Complete Quiz'}
+            </button>
+          ) : (
+            <button
+              onClick={() => setCurrentQuestion(Math.min(questions.length - 1, currentQuestion + 1))}
+              disabled={responses[currentQuestion] === 0}
+              className="flex-1 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-lg hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              Next
+              <i className="fas fa-chevron-right" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
