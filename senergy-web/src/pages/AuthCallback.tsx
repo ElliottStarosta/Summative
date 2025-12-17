@@ -18,7 +18,9 @@ export const AuthCallback = () => {
 
     if (token) {
       localStorage.setItem('auth_token', token)
-      navigate('/dashboard')
+      // After completing OAuth sign-in, send user to quiz so new accounts
+      // are onboarded through the personality flow before seeing dashboard
+      navigate('/quiz')
     } else {
       navigate('/login')
     }

@@ -9,6 +9,7 @@ interface AuthContextType extends AuthState {
   loginWithGithub: (code: string) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
+  updateUserProfile: (partial: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -154,6 +155,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
   }, [])
 
+  const updateUserProfile = useCallback((partial: Partial<User>) => {
+    setState(prev => ({
+      ...prev,
+      user: prev.user ? { ...prev.user, ...partial } : prev.user,
+    }))
+  }, [])
+
   const value: AuthContextType = {
     ...state,
     login,
@@ -162,6 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loginWithGithub,
     logout,
     isAuthenticated: !!state.user,
+    updateUserProfile,
   }
 
   return (

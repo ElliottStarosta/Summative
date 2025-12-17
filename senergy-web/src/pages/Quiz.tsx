@@ -11,9 +11,23 @@ interface QuizQuestion {
   reverse?: boolean
 }
 
+// Fallback questions if API is not yet wired or returns empty
+const DEFAULT_QUESTIONS: QuizQuestion[] = [
+  { id: 1, text: 'I feel energized after spending time in large groups.', weight: 2 },
+  { id: 2, text: 'I prefer quiet, low-key hangouts over big events.', weight: 2, reverse: true },
+  { id: 3, text: 'Spontaneous plans excite me more than they stress me out.', weight: 1 },
+  { id: 4, text: 'I need alone time to recharge after social activities.', weight: 2, reverse: true },
+  { id: 5, text: 'I enjoy meeting new people in unfamiliar places.', weight: 2 },
+  { id: 6, text: 'I would rather have a deep 1:1 conversation than be in a loud crowd.', weight: 1, reverse: true },
+  { id: 7, text: 'Busy, high-energy venues are my ideal kind of spot.', weight: 2 },
+  { id: 8, text: 'I often leave events earlier than others because I feel drained.', weight: 1, reverse: true },
+  { id: 9, text: 'I like being the one who suggests and organizes group plans.', weight: 1 },
+  { id: 10, text: 'I feel uncomfortable when all attention is on me.', weight: 1, reverse: true },
+]
+
 export const Quiz: React.FC = () => {
   const navigate = useNavigate()
-  const { token } = useAuth()
+  const { token, updateUserProfile } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
@@ -31,12 +45,19 @@ export const Quiz: React.FC = () => {
         const response = await axios.get('/api/quiz/questions', {
           headers: { Authorization: `Bearer ${token}` },
         })
-        setQuestions(response.data)
-        setResponses(new Array(response.data.length).fill(0))
+        const data: QuizQuestion[] =
+          Array.isArray(response.data) && response.data.length > 0
+            ? response.data
+            : DEFAULT_QUESTIONS
+
+        setQuestions(data)
+        setResponses(new Array(data.length).fill(0))
         setLoading(false)
       } catch (error) {
-        console.error('Failed to load questions:', error)
-        alert('Failed to load quiz questions. Please refresh the page.')
+        console.error('Failed to load questions, falling back to defaults:', error)
+        // Use local defaults so the quiz always renders even if the API is not ready
+        setQuestions(DEFAULT_QUESTIONS)
+        setResponses(new Array(DEFAULT_QUESTIONS.length).fill(0))
         setLoading(false)
       }
     }
@@ -60,13 +81,6 @@ export const Quiz: React.FC = () => {
     const newResponses = [...responses]
     newResponses[currentQuestion] = value
     setResponses(newResponses)
-
-    // Auto-advance to next question after selection
-    setTimeout(() => {
-      if (currentQuestion < questions.length - 1) {
-        setCurrentQuestion(currentQuestion + 1)
-      }
-    }, 300)
   }
 
   const handleSubmit = async () => {
@@ -86,6 +100,13 @@ export const Quiz: React.FC = () => {
       )
 
       setResults(response.data)
+      // Update auth user profile so dashboard access is unlocked immediately
+      if (response.data?.personalityType || response.data?.adjustmentFactor) {
+        updateUserProfile({
+          personalityType: response.data.personalityType,
+          adjustmentFactor: response.data.adjustmentFactor,
+        })
+      }
       setShowResults(true)
 
       // Auto-redirect after showing results
@@ -96,6 +117,28 @@ export const Quiz: React.FC = () => {
       alert('Failed to submit quiz. Please try again.')
       setIsSubmitting(false)
     }
+  }
+
+  // If we somehow finish loading but have no questions, show a friendly message
+  if (!loading && questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center bg-white rounded-2xl shadow-lg p-8">
+          <h1 className="text-2xl font-bold text-neutral-900 mb-3">Quiz not configured</h1>
+          <p className="text-neutral-600 mb-4 text-sm">
+            We couldn&apos;t find any quiz questions to show you yet. Please try again in a moment,
+            or contact the admin if this keeps happening.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-2 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition"
+          >
+            <i className="fas fa-rotate-right mr-2" />
+            Retry
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -242,8 +285,8 @@ export const Quiz: React.FC = () => {
           {/* Description */}
           <p className="text-sm text-neutral-500 text-center">
             {responses[currentQuestion] === 0
-              ? 'Select your response to continue'
-              : 'Next question will appear automatically'}
+              ? 'Select your response to enable the Next button'
+              : 'Use the Next button below to move to the next question'}
           </p>
         </div>
 
