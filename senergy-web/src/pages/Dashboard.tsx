@@ -130,13 +130,22 @@ export const Dashboard: React.FC = () => {
                 {user?.email}
               </p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center gap-1.5"
-            >
-              <i className="fas fa-sign-out-alt text-xs" />
-              Sign out
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/rate')}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm hover:shadow-md transition-all flex items-center gap-1.5"
+              >
+                <i className="fas fa-star text-xs" />
+                Rate a place
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center gap-1.5"
+              >
+                <i className="fas fa-sign-out-alt text-xs" />
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       </header>

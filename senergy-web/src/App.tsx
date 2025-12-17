@@ -6,6 +6,7 @@ import { Register } from '@/pages/Register'
 import { Quiz } from '@/pages/Quiz'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { Dashboard } from '@/pages/Dashboard'
+import { Rate } from '@/pages/Rate'
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -71,6 +72,15 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Quiz />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/rate"
+        element={
+          <ProtectedRoute>
+            <Rate />
           </ProtectedRoute>
         }
       />
