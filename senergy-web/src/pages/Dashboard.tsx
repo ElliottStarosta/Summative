@@ -110,8 +110,8 @@ export const Dashboard: React.FC = () => {
       <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-md">
-              <i className="fas fa-sparkles text-white text-lg" />
+            <div className="w-[3.75rem] h-[4.0rem] rounded-2xl flex items-center justify-center">
+              <img src="/logo.png" alt="Senergy Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-[0.18em]">
