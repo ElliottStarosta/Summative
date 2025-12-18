@@ -10,6 +10,8 @@ interface AuthContextType extends AuthState {
   logout: () => void
   isAuthenticated: boolean
   updateUserProfile: (partial: Partial<User>) => void
+  user: User | null
+  token: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -29,7 +31,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (token) {
         try {
           const response = await axios.get('/api/auth/verify', {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 5000, // 5 second timeout
           })
           setState(prev => ({
             ...prev,
@@ -37,7 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             token,
             isLoading: false,
           }))
-        } catch (error) {
+        } catch (error: any) {
+          console.error('Token verification failed:', error)
           localStorage.removeItem('auth_token')
           setState(prev => ({ ...prev, isLoading: false, token: null }))
         }
@@ -46,7 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    verifyToken()
+    verifyToken().catch((error) => {
+      console.error('Error in verifyToken:', error)
+      setState(prev => ({ ...prev, isLoading: false }))
+    })
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -164,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value: AuthContextType = {
     ...state,
+    user: state.user,
     login,
     register,
     loginWithGoogle,

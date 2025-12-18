@@ -1,10 +1,16 @@
-import express, { Express } from 'express'
+import express, { Express, Request, Response } from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import { errorHandler } from '@/middleware/errorHandler'
-import { requestLogger } from './middleware/requestlogger'
+import { requestLogger } from './middleware/requestLogger'
+
+// Routes
 import authRoutes from '@/routes/auth'
 import quizRoutes from '@/routes/quiz'
+import ratingsRoutes from '@/routes/rating'
+import groupsRoutes from '@/routes/groups'
+import usersRoutes from '@/routes/users'
+import placesRoutes from '@/routes/places'
 
 dotenv.config()
 
@@ -28,27 +34,89 @@ export function createServer(): Express {
   // Logging
   app.use(requestLogger)
 
-  // Health Check
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() })
+  // ============================================
+  // HEALTH & STATUS ENDPOINTS
+  // ============================================
+
+  app.get('/health', (req: Request, res: Response) => {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    })
   })
 
-  // Routes
-  app.use('/auth', authRoutes)
-  app.use('/quiz', quizRoutes)
+  app.get('/', (req: Request, res: Response) => {
+    res.json({
+      name: 'Senergy API',
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      endpoints: {
+        auth: '/api/auth',
+        quiz: '/api/quiz',
+        ratings: '/api/ratings',
+        groups: '/api/groups',
+        users: '/api/users',
+        places: '/api/places',
+      },
+    })
+  })
 
-  // API prefix for development
+  // ============================================
+  // API ROUTES
+  // ============================================
+
+  // Auth
   app.use('/api/auth', authRoutes)
-  app.use('/api/quiz', quizRoutes)
+  app.use('/auth', authRoutes) // Alternative path
 
-  // 404 Handler
-  app.use((req, res) => {
-    res.status(404).json({ error: 'Route not found' })
+  // Quiz
+  app.use('/api/quiz', quizRoutes)
+  app.use('/quiz', quizRoutes) // Alternative path
+
+  // Ratings
+  app.use('/api/ratings', ratingsRoutes)
+  app.use('/ratings', ratingsRoutes) // Alternative path
+
+  // Groups
+  app.use('/api/groups', groupsRoutes)
+  app.use('/groups', groupsRoutes) // Alternative path
+
+  // Users (Matching)
+  app.use('/api/users', usersRoutes)
+  app.use('/users', usersRoutes) // Alternative path
+
+  // Places
+  app.use('/api/places', placesRoutes)
+  app.use('/places', placesRoutes) // Alternative path
+
+  // ============================================
+  // 404 HANDLER
+  // ============================================
+
+  app.use((req: Request, res: Response) => {
+    res.status(404).json({
+      success: false,
+      error: 'Route not found',
+      path: req.path,
+      method: req.method,
+      availableEndpoints: {
+        health: 'GET /health',
+        auth: 'POST /api/auth/register, /api/auth/login, etc',
+        quiz: 'GET /api/quiz/questions, POST /api/quiz/submit',
+        ratings: 'POST /api/ratings, GET /api/ratings, etc',
+        groups: 'POST /api/groups, GET /api/groups/:id, etc',
+        users: 'GET /api/users/matches, GET /api/users/:id/profile',
+        places: 'GET /api/places/search, GET /api/places/:placeId',
+      },
+    })
   })
 
-  // Error Handler
+  // ============================================
+  // ERROR HANDLER (Must be last)
+  // ============================================
+
   app.use(errorHandler)
 
   return app
 }
-

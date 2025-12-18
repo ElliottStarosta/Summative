@@ -1,10 +1,8 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/context/AuthContext'
 
 export const AuthCallback = () => {
   const navigate = useNavigate()
-  const { loginWithGoogle } = useAuth()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)

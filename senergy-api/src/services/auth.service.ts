@@ -62,7 +62,7 @@ export class AuthService {
     }
 
     const user: User = {
-      id: userData.id,
+      id: userDoc.id,
       email: userData.email,
       displayName: userData.displayName,
       createdAt: userData.createdAt,
@@ -84,7 +84,7 @@ export class AuthService {
 
     const data = doc.data() as User
     return {
-      id: data.id,
+      id: doc.id,
       email: data.email,
       displayName: data.displayName,
       createdAt: data.createdAt,
@@ -143,7 +143,7 @@ export class AuthService {
       // Existing user
       const userData = userDoc.data() as User
       const user: User = {
-        id: userData.id,
+        id: userDoc.id,
         email: userData.email,
         displayName: userData.displayName,
         avatar: userData.avatar,
@@ -222,7 +222,7 @@ export class AuthService {
       // Existing user
       const userData = userDoc.data() as User
       const user: User = {
-        id: userData.id,
+        id: userDoc.id,
         email: userData.email,
         displayName: userData.displayName,
         avatar: userData.avatar,
@@ -238,6 +238,94 @@ export class AuthService {
       throw new Error('GitHub authentication failed')
     }
   }
+
+  async handleDiscordAuth(discordId: string, verificationCode?: string): Promise<{ user: User; token: string }> {
+    try {
+      // Find user by Discord ID
+      const snapshot = await db.collection('users').where('discordId', '==', discordId).get()
+
+      if (snapshot.empty) {
+        throw new Error('Discord account not linked. Please register and verify your Discord account first.')
+      }
+
+      const userDoc = snapshot.docs[0]
+      const userData = userDoc.data() as User & { discordVerified?: boolean }
+
+      // If verification code provided, verify it
+      if (verificationCode) {
+        // Check verification codes collection
+        const codeDoc = await db.collection('verificationCodes').doc(verificationCode).get()
+        
+        if (!codeDoc.exists) {
+          throw new Error('Invalid verification code')
+        }
+
+        const codeData = codeDoc.data()
+        const now = Date.now()
+        const expiresAt = codeData?.expiresAt || 0
+
+        // Check if code is expired (24 hours)
+        if (now > expiresAt) {
+          await db.collection('verificationCodes').doc(verificationCode).delete()
+          throw new Error('Verification code has expired. Please request a new one.')
+        }
+
+        // Check if code belongs to this user
+        if (codeData?.userId !== userDoc.id) {
+          throw new Error('Verification code does not match this account')
+        }
+
+        // Mark user as verified and link Discord ID if not already linked
+        await db.collection('users').doc(userDoc.id).update({
+          discordVerified: true,
+          discordId: discordId,
+        })
+
+        // Delete used verification code
+        await db.collection('verificationCodes').doc(verificationCode).delete()
+      } else {
+        // No code provided - check if already verified
+        if (!userData.discordVerified) {
+          throw new Error('Discord account not verified. Please provide a verification code.')
+        }
+      }
+
+      const user: User = {
+        id: userDoc.id,
+        email: userData.email,
+        displayName: userData.displayName,
+        avatar: userData.avatar,
+        createdAt: userData.createdAt,
+        personalityType: userData.personalityType,
+        adjustmentFactor: userData.adjustmentFactor,
+        discordId: userData.discordId || discordId,
+        discordVerified: true,
+      }
+
+      const token = this.generateToken(user)
+      return { user, token }
+    } catch (error: any) {
+      console.error('Discord auth error:', error)
+      throw new Error(error.message || 'Discord authentication failed')
+    }
+  }
+
+  async generateVerificationCode(userId: string, discordId: string): Promise<string> {
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    const expiresAt = Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+
+    // Store code in Firestore
+    await db.collection('verificationCodes').doc(code).set({
+      userId,
+      discordId,
+      expiresAt,
+      createdAt: new Date().toISOString(),
+    })
+
+    return code
+  }
 }
 
 export const authService = new AuthService()
+export default new AuthService();

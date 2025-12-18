@@ -7,6 +7,8 @@ export interface User {
   personalityType?: string
   adjustmentFactor?: number
   passwordHash?: string
+  discordId?: string
+  discordVerified?: boolean
 }
 
 export interface JWTPayload {
@@ -23,4 +25,94 @@ export interface QuizSubmission {
   personalityType: string
   description: string
   timestamp: string
+}
+
+export interface RatingCategory {
+  crowdSize: number
+  noiseLevel: number
+  socialEnergy: number
+  service: number
+  cleanliness: number
+  atmosphere: number
+  accessibility: number
+}
+
+export interface Rating {
+  id: string
+  userId: string
+  userAdjustmentFactor: number
+  userPersonalityType: string
+  placeId: string
+  placeName: string
+  placeAddress: string
+  location: { lat: number; lng: number }
+  categories: RatingCategory
+  overallScore: number
+  comment?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PlaceStats {
+  totalRatings: number
+  avgOverallScore: number
+  byPersonality: {
+    introvert: { avgScore: number; count: number }
+    ambivert: { avgScore: number; count: number }
+    extrovert: { avgScore: number; count: number }
+  }
+  avgCategories: RatingCategory
+  lastRatedAt: string
+}
+
+export interface Place {
+  id: string
+  name: string
+  address: string
+  location: { lat: number; lng: number }
+  category?: string
+  stats: PlaceStats
+}
+
+export interface GroupMember {
+  userId: string
+  displayName: string
+  adjustmentFactor: number
+  personalityType: string
+}
+
+export interface RecommendedPlace {
+  placeId: string
+  placeName: string
+  address: string
+  location: { lat: number; lng: number }
+  predictedScore: number
+  confidenceScore: number
+  reasoning: string
+  categories: RatingCategory
+}
+
+export interface GroupVotes {
+  [userId: string]: string[] // array of placeIds in ranked order
+}
+
+export interface Group {
+  id: string
+  createdBy: string
+  createdAt: string
+  members: string[]
+  memberProfiles: { [userId: string]: GroupMember }
+  searchLocation: { lat: number; lng: number }
+  searchRadius: number
+  city?: string
+  communityId?: string
+  communityName?: string
+  recommendedPlaces?: RecommendedPlace[]
+  votes: GroupVotes
+  finalPlace?: {
+    placeId: string
+    placeName: string
+    selectedAt: string
+  }
+  status: 'active' | 'place_selected' | 'archived'
 }

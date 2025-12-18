@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { authService } from '@/services/auth.service'
 import { authMiddleware } from '@/middleware/auth'
+import { db } from '@/config/firebase'
 
 const router = Router()
 
@@ -148,6 +149,49 @@ router.get('/verify', authMiddleware, async (req: Request, res: Response) => {
     res.json({ user })
   } catch (error: any) {
     res.status(400).json({ error: error.message })
+  }
+})
+
+// Discord Auth - Get token from Discord ID
+router.post('/discord', async (req: Request, res: Response) => {
+  try {
+    const { discordId, verificationCode } = req.body
+
+    if (!discordId) {
+      return res.status(400).json({ error: 'Discord ID required' })
+    }
+
+    const result = await authService.handleDiscordAuth(discordId, verificationCode)
+    res.json(result)
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Discord auth failed' })
+  }
+})
+
+// Generate verification code for Discord linking
+router.post('/discord/verify-code', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!
+    const { discordId } = req.body
+
+    if (!discordId) {
+      return res.status(400).json({ error: 'Discord ID required' })
+    }
+
+    const code = await authService.generateVerificationCode(userId, discordId)
+    
+    // Update user with Discord ID (not verified yet)
+    await db.collection('users').doc(userId).update({
+      discordId: discordId,
+    })
+
+    res.json({ 
+      success: true,
+      code,
+      message: 'Verification code generated. Use this code with /verify command in Discord.'
+    })
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to generate verification code' })
   }
 })
 

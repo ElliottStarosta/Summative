@@ -1,12 +1,17 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+
+// Pages
 import { Login } from '@/pages/Login'
 import { Register } from '@/pages/Register'
 import { Quiz } from '@/pages/Quiz'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { Dashboard } from '@/pages/Dashboard'
 import { Rate } from '@/pages/Rate'
+import { Groups } from '@/pages/Groups'
+import { Matching } from '@/pages/Matching'
+import { PlaceDetails } from '@/pages/PlaceDetails'
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -28,9 +33,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/login" replace />
   }
 
-  // If user is authenticated but has not completed the quiz/personality profile,
-  // prevent access to the dashboard and send them to the quiz instead.
-  if (location.pathname === '/dashboard' && !user?.personalityType) {
+  // Redirect to quiz if user hasn't completed personality profile
+  if (
+    location.pathname !== '/quiz' &&
+    !user?.personalityType &&
+    location.pathname !== '/rate' &&
+    location.pathname !== '/groups' &&
+    location.pathname !== '/matching'
+  ) {
     return <Navigate to="/quiz" replace />
   }
 
@@ -85,6 +95,33 @@ const AppRoutes: React.FC = () => {
         }
       />
 
+      <Route
+        path="/groups/:groupId?"
+        element={
+          <ProtectedRoute>
+            <Groups />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/matching"
+        element={
+          <ProtectedRoute>
+            <Matching />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/places/:placeId"
+        element={
+          <ProtectedRoute>
+            <PlaceDetails />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Dashboard */}
       <Route
         path="/dashboard"
@@ -95,8 +132,11 @@ const AppRoutes: React.FC = () => {
         }
       />
 
-      {/* Fallback */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      {/* Root fallback */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      {/* 404 */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )
 }
