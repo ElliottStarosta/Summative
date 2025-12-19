@@ -30,10 +30,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = localStorage.getItem('auth_token')
       if (token) {
         try {
-          const response = await axios.get('/api/auth/verify', {
-            headers: { Authorization: `Bearer ${token}` },
+          // Create axios instance with timeout
+          const axiosInstance = axios.create({
             timeout: 5000, // 5 second timeout
           })
+
+          const response = await axiosInstance.get('/api/auth/verify', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+
           setState(prev => ({
             ...prev,
             user: response.data.user,
@@ -41,9 +46,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isLoading: false,
           }))
         } catch (error: any) {
-          console.error('Token verification failed:', error)
+          console.warn('Token verification failed, clearing token:', error.message)
+          // Token is invalid or expired, clear it
           localStorage.removeItem('auth_token')
-          setState(prev => ({ ...prev, isLoading: false, token: null }))
+          setState(prev => ({ ...prev, isLoading: false, token: null, user: null }))
         }
       } else {
         setState(prev => ({ ...prev, isLoading: false }))
@@ -70,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: null,
       })
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 'Login failed'
+      const errorMsg = error.response?.data?.message || error.message || 'Login failed'
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -94,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: null,
       })
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 'Registration failed'
+      const errorMsg = error.response?.data?.message || error.message || 'Registration failed'
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -118,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: null,
       })
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 'Google login failed'
+      const errorMsg = error.response?.data?.message || error.message || 'Google login failed'
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -142,7 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: null,
       })
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 'GitHub login failed'
+      const errorMsg = error.response?.data?.message || error.message || 'GitHub login failed'
       setState(prev => ({
         ...prev,
         isLoading: false,

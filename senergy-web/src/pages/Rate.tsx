@@ -1,9 +1,12 @@
 // senergy-web/src/pages/Rate.tsx
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '@/services/firebase'
 import gsap from 'gsap'
 import { useAuth } from '@/context/AuthContext'
 import axios from 'axios'
+import Snowfall from 'react-snowfall'
 
 interface PlaceResult {
   id?: string
@@ -15,18 +18,20 @@ interface PlaceResult {
 }
 
 export const Rate: React.FC = () => {
-  const { token } = useAuth()
+  const { user, token } = useAuth()
   const navigate = useNavigate()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const segmentRef = useRef<HTMLDivElement>(null)
   const questionTextRef = useRef<HTMLDivElement>(null)
-  const sliderFillRef = useRef<HTMLDivElement>(null)
+  const sliderRef = useRef<HTMLInputElement>(null)
   const prevRatingIndexRef = useRef<number>(0)
 
   // State
   const [segment, setSegment] = useState(0)
   const [places, setPlaces] = useState<PlaceResult[]>([])
+  const [categorizedPlaces, setCategorizedPlaces] = useState<{ [category: string]: PlaceResult[] }>({})
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null)
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -41,7 +46,7 @@ export const Rate: React.FC = () => {
   })
   const [currentRatingIndex, setCurrentRatingIndex] = useState(0)
   const [comment, setComment] = useState('')
-  const [isAnimating, setIsAnimating] = useState(false)
+  const categoryRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
   // Rating questions in order
   const ratingQuestions = [
@@ -52,147 +57,103 @@ export const Rate: React.FC = () => {
     { key: 'service' as const, label: 'Service Quality', hint: 'Service quality', description: 'How was the service?' },
   ]
 
-  // Search for nearby places with expanding radius (4 second timeout)
-  const searchNearbyPlaces = async (coords: { lat: number; lng: number }, timeoutMs: number = 4000) => {
-    console.log('[Rate] Starting nearby places search at:', coords)
-    const startTime = Date.now()
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Search timeout')), timeoutMs)
-    })
-    
-    // Optimized: Start with most common queries and larger radii first
-    const searchQueries = [
-      'restaurant cafe bar',  // Most common
-      'shop store business',  // Second most common
-    ]
-    
-    // Start with larger radii first (more likely to find results)
-    const radii = [2000, 5000, 1000, 10000] // Reduced to speed up
-    
-    let attemptCount = 0
-    const maxAttempts = 6 // Reduced to speed up
-    
-    // Try each query with radius (optimized order)
-    const searchPromise = (async () => {
-      for (const query of searchQueries) {
-        for (const radius of radii) {
-          // Check timeout
-          if (Date.now() - startTime > timeoutMs) {
-            console.log('[Rate] ⏱️ Timeout reached, stopping search')
-            return []
-          }
-          
-          attemptCount++
-          if (attemptCount > maxAttempts) {
-            console.log('[Rate] Reached max attempts, stopping search')
-            return []
-          }
-          
-          const attemptStart = Date.now()
-          console.log(`[Rate] Attempt ${attemptCount}: Searching "${query}" within ${radius}m radius...`)
-          
-          try {
-            const params = new URLSearchParams({
-              query,
-              location: `${coords.lat},${coords.lng}`,
-              radius: radius.toString(),
-            })
-
-            const fetchStart = Date.now()
-            const resp = await fetch(`/api/places/search?${params.toString()}`)
-            const fetchTime = Date.now() - fetchStart
-            console.log(`[Rate] API call took ${fetchTime}ms`)
-            
-            const parseStart = Date.now()
-            const data = await resp.json()
-            const parseTime = Date.now() - parseStart
-            console.log(`[Rate] JSON parse took ${parseTime}ms`)
-
-            if (data.success && data.data && data.data.length > 0) {
-              const totalTime = Date.now() - startTime
-              console.log(`[Rate] ✅ Found ${data.data.length} places in ${totalTime}ms (query: "${query}", radius: ${radius}m)`)
-              
-              const searchResults = data.data.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                address: p.address,
-                lat: p.location?.lat,
-                lng: p.location?.lng,
-              }))
-              return searchResults
-            } else {
-              const attemptTime = Date.now() - attemptStart
-              console.log(`[Rate] No results (${attemptTime}ms) - trying next...`)
-            }
-          } catch (error) {
-            const attemptTime = Date.now() - attemptStart
-            console.error(`[Rate] ❌ Search failed for "${query}" at ${radius}m (${attemptTime}ms):`, error)
-          }
-        }
-        if (attemptCount > maxAttempts) break
-      }
-      
-      const totalTime = Date.now() - startTime
-      console.log(`[Rate] ⚠️ No places found after ${totalTime}ms and ${attemptCount} attempts`)
-      return []
-    })()
-    
-    try {
-      return await Promise.race([searchPromise, timeoutPromise])
-    } catch (error) {
-      const totalTime = Date.now() - startTime
-      console.log(`[Rate] ⏱️ Search timed out after ${totalTime}ms`)
-      return []
-    }
-  }
-
   // Reverse geocode coordinates to get address
   const reverseGeocode = async (coords: { lat: number; lng: number }): Promise<PlaceResult | null> => {
-    console.log('[Rate] Starting reverse geocoding for:', coords)
-    const startTime = Date.now()
-    
     try {
       const params = new URLSearchParams({
         lat: coords.lat.toString(),
         lng: coords.lng.toString(),
       })
 
-      const fetchStart = Date.now()
       const resp = await fetch(`/api/places/reverse?${params.toString()}`)
-      const fetchTime = Date.now() - fetchStart
-      console.log(`[Rate] Reverse geocode API call took ${fetchTime}ms`)
-      
-      const parseStart = Date.now()
       const data = await resp.json()
-      const parseTime = Date.now() - parseStart
-      console.log(`[Rate] Reverse geocode JSON parse took ${parseTime}ms`)
 
       if (data.success && data.data) {
-        const totalTime = Date.now() - startTime
-        console.log(`[Rate] ✅ Reverse geocoded successfully in ${totalTime}ms:`, data.data.name)
-        
         return {
           id: data.data.id,
           name: data.data.name || 'Current Location',
-          address: data.data.address || 'Current Location',
+          address: data.data.address || 'Your current location',
           lat: data.data.location?.lat,
           lng: data.data.location?.lng,
         }
-      } else {
-        console.log('[Rate] ⚠️ Reverse geocode returned no data')
       }
     } catch (error) {
-      const totalTime = Date.now() - startTime
-      console.error(`[Rate] ❌ Reverse geocoding failed after ${totalTime}ms:`, error)
+      console.error('Reverse geocoding failed:', error)
     }
-    
+
     return null
   }
+
+  // Search for nearby places with 5 second timeout
+  const searchNearbyPlaces = async (coords: { lat: number; lng: number }, timeoutMs: number = 10000) => {
+    const startTime = Date.now()
+
+    // All queries upfront
+    const allQueries = [
+      { query: 'restaurant', category: '🍽️ Restaurants' },
+      { query: 'cafe', category: '☕ Cafes & Coffee' },
+      { query: 'bar', category: '🍺 Bars & Pubs' },
+    ]
+
+    const categorizedResults: { [category: string]: PlaceResult[] } = {}
+
+    // Search all queries in parallel
+    const allPromises = allQueries.map(({ query, category }) =>
+      (async () => {
+        try {
+          const params = new URLSearchParams({
+            query,
+            location: `${coords.lat},${coords.lng}`,
+            radius: '2000',
+          })
+
+          const resp = await fetch(`/api/places/search?${params.toString()}`)
+          const data = await resp.json()
+
+          if (data.success && data.data && data.data.length > 0) {
+            if (!categorizedResults[category]) {
+              categorizedResults[category] = []
+            }
+
+            const existingIds = new Set(categorizedResults[category].map(p => p.id))
+            const newPlaces = data.data
+              .map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                address: p.address,
+                lat: p.location?.lat,
+                lng: p.location?.lng,
+              }))
+              .filter((p: PlaceResult) => !existingIds.has(p.id))
+              .slice(0, 6)
+
+            categorizedResults[category].push(...newPlaces)
+            console.log(`✅ Found ${newPlaces.length} ${query} results`)
+          }
+        } catch (error) {
+          console.error(`Search error for "${query}":`, error)
+        }
+      })()
+    )
+
+    try {
+      await Promise.race([
+        Promise.all(allPromises),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+      ])
+    } catch (error) {
+      console.log('Search timeout, returning results')
+    }
+
+    return categorizedResults
+  }
+
+
 
   // Get user location and search for nearby places on mount
   useEffect(() => {
     if (!navigator.geolocation) {
-      setStatus({ type: 'error', message: 'Geolocation is not supported by your browser' })
+      setStatus({ type: 'error', message: 'Geolocation is not supported' })
       return
     }
 
@@ -200,86 +161,64 @@ export const Rate: React.FC = () => {
 
     const attemptGeolocation = () => {
       setIsLoading(true)
-      const geoStartTime = Date.now()
-      const attemptNumber = retryAttempted ? 2 : 1
-      console.log(`[Rate] Requesting geolocation (attempt ${attemptNumber})...`)
-      
+      console.log('Requesting geolocation...')
+
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          const geoTime = Date.now() - geoStartTime
-          console.log(`[Rate] ✅ Got geolocation in ${geoTime}ms:`, pos.coords)
-          
           const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
           setCoordinates(coords)
-          
-          const searchStartTime = Date.now()
+          console.log('Got location:', coords)
+
           try {
-            console.log('[Rate] Starting place search process...')
-            
-            // First, try to find nearby places with expanding radius (4 second timeout)
-            const searchResults = await searchNearbyPlaces(coords, 4000)
-            
-            if (searchResults.length > 0) {
-              const totalSearchTime = Date.now() - searchStartTime
-              console.log(`[Rate] ✅ Search complete in ${totalSearchTime}ms, found ${searchResults.length} places`)
-              setPlaces(searchResults)
-              setSegment(1) // Move to place selection
-            } else {
-              console.log('[Rate] No places found, trying reverse geocoding...')
-              const reverseStartTime = Date.now()
-              
-              // If no places found, use reverse geocoding to create a "Current Location" option
-              const currentLocation = await reverseGeocode(coords)
-              
-              if (currentLocation) {
-                const reverseTime = Date.now() - reverseStartTime
-                const totalTime = Date.now() - searchStartTime
-                console.log(`[Rate] ✅ Using reverse geocoded location (${reverseTime}ms, total: ${totalTime}ms)`)
-                setPlaces([currentLocation])
-                setSegment(1) // Move to place selection
-              } else {
-                // Final fallback: use reverse geocoding one more time with a simpler name
-                const finalLocation = await reverseGeocode(coords)
-                if (finalLocation && finalLocation.address && !finalLocation.address.match(/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/)) {
-                  // If address doesn't look like coordinates, use it
-                  setPlaces([finalLocation])
-                  setSegment(1)
-                } else {
-                  // Last resort: use a generic location name (never show coordinates)
-                  setPlaces([{
-                    id: `location_${coords.lat}_${coords.lng}`,
-                    name: 'Current Location',
-                    address: finalLocation?.address || 'Your current location',
-                    lat: coords.lat,
-                    lng: coords.lng,
-                  }])
-                  setSegment(1)
-                }
-              }
+            const locationPromise = reverseGeocode(coords)
+            const placesPromise = searchNearbyPlaces(coords, 5000)
+
+            const [locationResult, categorizedResults] = await Promise.all([
+              locationPromise,
+              placesPromise,
+            ])
+
+            // Create a special "Current Location" category
+            const finalCategorized: { [category: string]: PlaceResult[] } = {}
+
+            // Add current location category FIRST
+            if (locationResult) {
+              finalCategorized['📍 Your Location'] = [locationResult]
             }
-          } catch (error: any) {
-            const totalTime = Date.now() - searchStartTime
-            console.error(`[Rate] ❌ Error after ${totalTime}ms:`, error)
-            setStatus({ type: 'error', message: error.message || 'Failed to find nearby places' })
+
+            // Add other categorized results
+            Object.assign(finalCategorized, categorizedResults)
+
+            // Fallback if no results
+            if (Object.keys(finalCategorized).length === 0) {
+              finalCategorized['📍 Your Location'] = [{
+                id: `location_${coords.lat}_${coords.lng}`,
+                name: 'Current Location',
+                address: 'Your current location',
+                lat: coords.lat,
+                lng: coords.lng,
+              }]
+            }
+
+            setCategorizedPlaces(finalCategorized)
+            setSegment(1)
+          } catch (error) {
+            console.error('Error:', error)
+            setStatus({ type: 'error', message: 'Failed to find places' })
           } finally {
-            const totalTime = Date.now() - geoStartTime
-            console.log(`[Rate] ⏱️ Total time from geolocation request: ${totalTime}ms`)
             setIsLoading(false)
           }
         },
         (error) => {
-          console.log(`[Rate] ❌ Geolocation failed (attempt ${attemptNumber}):`, error)
-          
-          // Retry once after 1 second
+          console.log('Geolocation failed:', error)
+
           if (!retryAttempted) {
-            console.log('[Rate] ⏳ Retrying geolocation in 1 second...')
             retryAttempted = true
             setTimeout(() => {
               attemptGeolocation()
             }, 1000)
           } else {
-            // After retry failed, show error
-            setStatus({ type: 'error', message: 'Unable to get your location. Please enable location permissions.' })
+            setStatus({ type: 'error', message: 'Unable to get your location' })
             setIsLoading(false)
           }
         },
@@ -301,10 +240,21 @@ export const Rate: React.FC = () => {
     }
   }, [segment])
 
-  // Rating question transition animation - only animate question text and reset slider
+  // Add animation for category selection
+  useEffect(() => {
+    if (selectedCategory && categoryRefs.current[selectedCategory]) {
+      gsap.fromTo(
+        categoryRefs.current[selectedCategory],
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.4, ease: 'power3.out' }
+      )
+    }
+  }, [selectedCategory])
+
+  // Rating question text transition animation ONLY
   useEffect(() => {
     if (segment !== 2) return
-    
+
     // Skip animation on initial load
     if (prevRatingIndexRef.current === 0 && currentRatingIndex === 0) {
       prevRatingIndexRef.current = currentRatingIndex
@@ -314,45 +264,17 @@ export const Rate: React.FC = () => {
     if (questionTextRef.current && prevRatingIndexRef.current !== currentRatingIndex) {
       const isMovingForward = currentRatingIndex > prevRatingIndexRef.current
       const questionText = questionTextRef.current
-      const sliderFill = sliderFillRef.current
 
-      setIsAnimating(true)
+      const tl = gsap.timeline()
 
-      // Get next question's value for slider
-      const nextQuestion = ratingQuestions[currentRatingIndex]
-      const nextValue = categories[nextQuestion.key]
-      const nextWidth = `${((nextValue - 1) / 9) * 100}%`
-
-      // Create timeline for smooth transition
-      const tl = gsap.timeline({
-        onComplete: () => {
-          setIsAnimating(false)
-        },
-      })
-
-      // Animate slider back to midpoint (5) with clearing animation, then to next value
-      if (sliderFill) {
-        tl.to(sliderFill, {
-          width: '44.44%', // (5-1)/9 * 100 = 44.44%
-          duration: 0.2,
-          ease: 'power2.inOut',
-        })
-        // Then animate to next question's value
-        .to(sliderFill, {
-          width: nextWidth,
-          duration: 0.3,
-          ease: 'power2.out',
-        }, '-=0.1') // Start slightly before previous animation ends
-      }
-
-      // Slide out current question text (parallel with slider reset)
+      // Slide out current question text
       tl.to(questionText, {
         x: isMovingForward ? '-100%' : '100%',
         opacity: 0,
         duration: 0.3,
         ease: 'power2.in',
-      }, '-=0.2') // Start with slider animation
-        // Reset position for new question (off-screen opposite side)
+      })
+        // Reset position for new question
         .set(questionText, {
           x: isMovingForward ? '100%' : '-100%',
           opacity: 0,
@@ -369,32 +291,28 @@ export const Rate: React.FC = () => {
     }
   }, [currentRatingIndex, segment])
 
-  // Keyboard shortcuts - Enter to go to next
+  // Smooth slider animation when changing questions (GSAP)
   useEffect(() => {
-    if (segment !== 2 || currentRatingIndex >= ratingQuestions.length) return
+    if (segment !== 2 || !sliderRef.current) return
 
-    const handleKeyPress = (event: KeyboardEvent) => {
-      // Only handle if not typing in an input/textarea
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        return
+    const question = ratingQuestions[currentRatingIndex]
+    const currentValue = categories[question.key]
+    const sliderElement = sliderRef.current
+
+    // Animate slider to new value with smooth easing
+    gsap.to(
+      { value: parseFloat(sliderElement.value) },
+      {
+        value: currentValue,
+        duration: 0.8,
+        ease: 'power2.inOut',
+        onUpdate: function () {
+          sliderElement.value = this.targets()[0].value.toString()
+          sliderElement.dispatchEvent(new Event('input', { bubbles: true }))
+        },
       }
-
-      // Enter key to go to next question
-      if (event.key === 'Enter' && !isAnimating) {
-        if (currentRatingIndex < ratingQuestions.length - 1) {
-          setCurrentRatingIndex(currentRatingIndex + 1)
-        } else {
-          // If last question, move to comment section
-          setCurrentRatingIndex(ratingQuestions.length)
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyPress)
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress)
-    }
-  }, [segment, currentRatingIndex, ratingQuestions.length, isAnimating])
+    )
+  }, [currentRatingIndex, segment])
 
   const handlePlaceSelect = (place: PlaceResult) => {
     setSelectedPlace(place)
@@ -404,6 +322,43 @@ export const Rate: React.FC = () => {
   const handleCategoryChange = (key: keyof typeof categories, value: number) => {
     setCategories(prev => ({ ...prev, [key]: value }))
   }
+
+  // Keyboard shortcuts - Number keys and Enter
+  useEffect(() => {
+    if (segment !== 2 || currentRatingIndex >= ratingQuestions.length) return
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Only handle if not typing in an input/textarea
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return
+      }
+
+      // Number keys: 1-9 for values 1-9, 0 for 10
+      if (event.key >= '0' && event.key <= '9') {
+        let value = parseInt(event.key, 10)
+        if (value === 0) value = 10
+
+        const question = ratingQuestions[currentRatingIndex]
+        handleCategoryChange(question.key, value)
+        event.preventDefault()
+      }
+
+      // Enter key to go to next question
+      if (event.key === 'Enter') {
+        if (currentRatingIndex < ratingQuestions.length - 1) {
+          setCurrentRatingIndex(currentRatingIndex + 1)
+        } else {
+          setCurrentRatingIndex(ratingQuestions.length)
+        }
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress)
+    }
+  }, [segment, currentRatingIndex, ratingQuestions])
 
   const calculateOverallScore = (): number => {
     const weights = {
@@ -422,7 +377,7 @@ export const Rate: React.FC = () => {
   }
 
   const handleSubmit = async () => {
-    if (!selectedPlace) return
+    if (!selectedPlace || !user) return
 
     setIsSubmitting(true)
     setStatus(null)
@@ -430,28 +385,50 @@ export const Rate: React.FC = () => {
     try {
       const overallScore = calculateOverallScore()
 
-      await axios.post(
-        '/api/ratings',
-        {
-          placeId: selectedPlace.id,
-          placeName: selectedPlace.name,
-          placeAddress: selectedPlace.address || selectedPlace.vicinity,
-          location: { lat: selectedPlace.lat, lng: selectedPlace.lng },
-          categories,
-          overallScore,
-          comment: comment.trim(),
+      // Save to Firebase Firestore
+      const ratingData = {
+        userId: user.id,
+        userAdjustmentFactor: user.adjustmentFactor || 0,
+        userPersonalityType: user.personalityType || 'Unknown',
+        placeId: selectedPlace.id,
+        placeName: selectedPlace.name,
+        placeAddress: selectedPlace.address || '',
+        location: {
+          lat: selectedPlace.lat || 0,
+          lng: selectedPlace.lng || 0,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      )
+        categories,
+        overallScore,
+        comment: comment.trim(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }
+
+      // Add to Firestore ratings collection
+      await addDoc(collection(db, 'ratings'), ratingData)
+      console.log('Rating saved to Firestore')
+
+      // Also sync to backend API
+      try {
+        await axios.post(
+          '/api/ratings',
+          ratingData,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        console.log('Rating synced to backend')
+      } catch (apiError) {
+        console.warn('Backend sync failed, but local save succeeded:', apiError)
+      }
 
       setStatus({ type: 'success', message: 'Rating saved! Thanks for sharing.' })
       setSegment(3) // Show success
 
       setTimeout(async () => {
+        // Reset form
         setSegment(0)
         setPlaces([])
+        setCategorizedPlaces({})
+        setSelectedCategory(null)
         setSelectedPlace(null)
         setCategories({
           atmosphere: 5,
@@ -462,47 +439,15 @@ export const Rate: React.FC = () => {
         })
         setCurrentRatingIndex(0)
         setComment('')
-        setIsLoading(true)
-        
-        // Reload nearby places using the same search logic
-        if (coordinates) {
-          try {
-            const searchResults = await searchNearbyPlaces(coordinates, 4000)
-            
-            if (searchResults.length > 0) {
-              setPlaces(searchResults)
-              setSegment(1)
-            } else {
-              // If no places found, use reverse geocoding
-              const currentLocation = await reverseGeocode(coordinates)
-              
-              if (currentLocation && currentLocation.address && !currentLocation.address.match(/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/)) {
-                setPlaces([currentLocation])
-                setSegment(1)
-              } else {
-                // Fallback: never show coordinates
-                setPlaces([{
-                  id: `location_${coordinates.lat}_${coordinates.lng}`,
-                  name: 'Current Location',
-                  address: currentLocation?.address || 'Your current location',
-                  lat: coordinates.lat,
-                  lng: coordinates.lng,
-                }])
-                setSegment(1)
-              }
-            }
-          } catch (error) {
-            console.error('Failed to reload places:', error)
-          } finally {
-            setIsLoading(false)
-          }
-        }
+        setIsLoading(false)
+        // DON'T reload places - just go back to segment 1
+        setSegment(1)
       }, 2000)
     } catch (error: any) {
       console.error('Submit error:', error)
-      setStatus({ 
-        type: 'error', 
-        message: error.response?.data?.error || error.message || 'Failed to save rating' 
+      setStatus({
+        type: 'error',
+        message: error.message || 'Failed to save rating',
       })
     } finally {
       setIsSubmitting(false)
@@ -514,6 +459,11 @@ export const Rate: React.FC = () => {
       ref={containerRef}
       className="min-h-screen bg-gradient-to-br from-neutral-50 via-slate-50 to-blue-50 flex flex-col"
     >
+      <Snowfall
+        color="#a44ef2"
+        snowflakeCount={10}
+        style={{ position: 'fixed', width: '100vw', height: '100vh', opacity: 0.2 }}
+      />
       {/* Header */}
       <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -538,33 +488,14 @@ export const Rate: React.FC = () => {
 
       <main className="flex-1 w-full">
         <div className="max-w-2xl mx-auto px-4 py-10">
-          {/* Progress Indicator */}
+          {/* Title */}
           <div className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Step {segment + 1} of 3
-                </p>
-                <h2 className="text-2xl font-bold text-slate-900 mt-1">
-                  {segment === 0 && 'Finding nearby places'}
-                  {segment === 1 && 'Pick your place'}
-                  {segment === 2 && 'Rate the experience'}
-                  {segment === 3 && 'Thanks for rating!'}
-                </h2>
-              </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-indigo-600">{Math.round(((segment + 1) / 3) * 100)}%</div>
-                <p className="text-xs text-slate-500">Complete</p>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-indigo-600 to-purple-600 transition-all duration-500"
-                style={{ width: `${((segment + 1) / 3) * 100}%` }}
-              />
-            </div>
+            <h2 className="text-2xl font-bold text-slate-900">
+              {segment === 0 && 'Finding nearby places'}
+              {segment === 1 && 'Pick your place'}
+              {segment === 2 && 'Rate the experience'}
+              {segment === 3 && 'Thanks for rating!'}
+            </h2>
           </div>
 
           {/* Segment 0: Loading */}
@@ -580,11 +511,10 @@ export const Rate: React.FC = () => {
                   <>
                     {status && (
                       <div
-                        className={`px-4 py-3 rounded-xl text-sm font-semibold ${
-                          status.type === 'error'
-                            ? 'bg-red-50 text-red-700 border border-red-200'
-                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        }`}
+                        className={`px-4 py-3 rounded-xl text-sm font-semibold ${status.type === 'error'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
                       >
                         {status.message}
                       </div>
@@ -597,31 +527,107 @@ export const Rate: React.FC = () => {
 
           {/* Segment 1: Place Selection */}
           {segment === 1 && (
-            <div ref={segmentRef} className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 space-y-4">
-              <div className="max-h-96 overflow-y-auto space-y-2">
-                {places.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center py-8">No places found</p>
-                ) : (
-                  places.map((place, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handlePlaceSelect(place)}
-                      className="w-full text-left px-4 py-3 rounded-xl border-2 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition"
-                    >
-                      <p className="font-semibold text-slate-900">{place.name}</p>
-                      <p className="text-xs text-slate-500 mt-1">{place.address}</p>
-                    </button>
-                  ))
-                )}
-              </div>
+            <div ref={segmentRef} className="space-y-6">
+              {/* Category Selection or Place List */}
+              {!selectedCategory ? (
+                <div className="grid grid-cols-4 gap-4 w-full">
+                  {Object.keys(categorizedPlaces).map((category, idx) => {
+                    const isCurrentLocation = category === '📍 Your Location'
+                    const placeCount = categorizedPlaces[category].length
+
+                    return (
+                      <button
+                        key={category}
+                        onClick={() => {
+                          if (isCurrentLocation) {
+                            handlePlaceSelect(categorizedPlaces[category][0])
+                          } else {
+                            setSelectedCategory(category)
+                          }
+                        }}
+                        className={`p-6 rounded-2xl border-2 transition-all group flex flex-col items-center justify-center min-h-64 ${isCurrentLocation
+                            ? 'border-purple-300 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 hover:shadow-xl hover:border-purple-400 hover:scale-105'
+                            : 'border-slate-200 bg-white hover:border-indigo-400 hover:shadow-lg hover:scale-105'
+                          }`}
+                        style={{
+                          animation: `fadeInUp 0.5s ease-out ${idx * 0.1}s both`,
+                        }}
+                      >
+                        <div className="text-center flex flex-col items-center">
+                          <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl flex-shrink-0 ${isCurrentLocation
+                              ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                              : 'bg-gradient-to-br from-indigo-500 to-purple-500'
+                            }`}>
+                            {isCurrentLocation ? '📍' : category.split(' ')[0]}
+                          </div>
+                          <p className="font-bold text-slate-900 mb-2 text-base line-clamp-2">
+                            {category.replace(/^[^\s]+\s/, '')}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {isCurrentLocation ? 'Rate here' : `${placeCount} places`}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+
+                /* Selected Category - Place List */
+                <div
+                  ref={el => {
+                    if (el) categoryRefs.current[selectedCategory] = el
+                  }}
+                  className="space-y-4"
+                >
+                  {/* Back Button */}
+                  <button
+                    onClick={() => setSelectedCategory(null)}
+                    className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-semibold transition mb-4"
+                  >
+                    <i className="fas fa-arrow-left" />
+                    Back to Categories
+                  </button>
+
+                  {/* Category Title */}
+                  <h3 className="text-2xl font-bold text-slate-900 mb-6">
+                    {selectedCategory}
+                  </h3>
+
+                  {/* Places Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {categorizedPlaces[selectedCategory]?.map((place, idx) => (
+                      <button
+                        key={place.id || idx}
+                        onClick={() => handlePlaceSelect(place)}
+                        className="p-5 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50 transition-all group text-left shadow-sm hover:shadow-lg hover:scale-105"
+                        style={{
+                          animation: `fadeInUp 0.4s ease-out ${idx * 0.08}s both`,
+                        }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition mb-2">
+                              {place.name}
+                            </p>
+                            <p className="text-xs text-slate-500 line-clamp-2">
+                              {place.address}
+                            </p>
+                          </div>
+                          <i className="fas fa-chevron-right text-slate-400 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all ml-3" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {status && (
                 <div
-                  className={`px-4 py-3 rounded-xl text-sm font-semibold ${
-                    status.type === 'error'
-                      ? 'bg-red-50 text-red-700 border border-red-200'
-                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  }`}
+                  className={`px-4 py-3 rounded-xl text-sm font-semibold ${status.type === 'error'
+                    ? 'bg-red-50 text-red-700 border border-red-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}
                 >
                   {status.message}
                 </div>
@@ -641,43 +647,29 @@ export const Rate: React.FC = () => {
               {/* Progress Indicator */}
               {currentRatingIndex < ratingQuestions.length && (
                 <div className="mb-8">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-slate-600">
                         Question {currentRatingIndex + 1} of {ratingQuestions.length}
                       </p>
                       <h2 className="text-3xl font-bold text-slate-900 mt-1">Rate Your Experience</h2>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-indigo-600">
-                        {Math.round(((currentRatingIndex + 1) / ratingQuestions.length) * 100)}%
-                      </div>
-                      <p className="text-xs text-slate-500">Complete</p>
-                    </div>
-                  </div>
-                  {/* Progress Bar */}
-                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 transition-all duration-500"
-                      style={{ width: `${((currentRatingIndex + 1) / ratingQuestions.length) * 100}%` }}
-                    />
                   </div>
                 </div>
               )}
 
-              {/* Single Rating Question - only question text animates */}
+              {/* Single Rating Question */}
               {currentRatingIndex < ratingQuestions.length && (() => {
                 const question = ratingQuestions[currentRatingIndex]
                 const value = categories[question.key]
-                
+
                 return (
                   <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 mb-6">
-                    {/* Question Text - with overflow hidden wrapper for animations */}
+                    {/* Question Text */}
                     <div className="w-full mb-8" style={{ overflow: 'hidden' }}>
                       <h3
                         ref={questionTextRef}
-                        className="text-2xl font-bold leading-tight"
-                        style={{ color: '#1a0a2e', willChange: 'transform' }}
+                        className="text-2xl font-bold leading-tight text-slate-900"
                       >
                         {question.description}
                       </h3>
@@ -697,58 +689,45 @@ export const Rate: React.FC = () => {
                       <div className="relative">
                         <div className="relative h-6 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 rounded-full overflow-hidden">
                           <div
-                            ref={sliderFillRef}
-                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 rounded-full"
+                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 rounded-full transition-all duration-150"
                             style={{ width: `${((value - 1) / 9) * 100}%` }}
                           />
                           <input
+                            ref={sliderRef}
                             type="range"
                             min={1}
                             max={10}
                             value={value}
                             onChange={e => handleCategoryChange(question.key, Number(e.target.value))}
-                            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer z-10 slider-input"
+                            style={{
+                              WebkitAppearance: 'slider-horizontal',
+                            } as React.CSSProperties}
                           />
+
                         </div>
-                        <div className="flex justify-between mt-4 text-sm text-slate-600">
-                          <span className="font-semibold">1</span>
-                          <span className="font-semibold text-slate-700">{question.hint}</span>
-                          <span className="font-semibold">10</span>
-                        </div>
+                        <p className="text-xs text-slate-500 mt-3 text-center">Use number keys (1-0) or drag. Press Enter to continue.</p>
                       </div>
                     </div>
-
-                    {/* Description */}
-                    <p className="text-sm text-slate-500 text-center mb-6">
-                      {currentRatingIndex === ratingQuestions.length - 1
-                        ? 'Press Enter or use the Finish button below to complete your rating'
-                        : 'Press Enter or use the Next button below to move to the next question'}
-                    </p>
                   </div>
                 )
               })()}
 
-              {/* Navigation - Fixed outside card */}
+              {/* Navigation */}
               {currentRatingIndex < ratingQuestions.length && (
                 <div className="flex gap-4">
                   {currentRatingIndex === 0 ? (
                     <button
-                      onClick={() => {
-                        if (!isAnimating) setSegment(1)
-                      }}
-                      disabled={isAnimating}
-                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      onClick={() => setSegment(1)}
+                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"
                     >
                       <i className="fas fa-chevron-left" />
                       Back to Places
                     </button>
                   ) : (
                     <button
-                      onClick={() => {
-                        if (!isAnimating) setCurrentRatingIndex(currentRatingIndex - 1)
-                      }}
-                      disabled={isAnimating}
-                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      onClick={() => setCurrentRatingIndex(currentRatingIndex - 1)}
+                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"
                     >
                       <i className="fas fa-chevron-left" />
                       Previous
@@ -756,16 +735,13 @@ export const Rate: React.FC = () => {
                   )}
                   <button
                     onClick={() => {
-                      if (!isAnimating) {
-                        if (currentRatingIndex < ratingQuestions.length - 1) {
-                          setCurrentRatingIndex(currentRatingIndex + 1)
-                        } else {
-                          setCurrentRatingIndex(ratingQuestions.length)
-                        }
+                      if (currentRatingIndex < ratingQuestions.length - 1) {
+                        setCurrentRatingIndex(currentRatingIndex + 1)
+                      } else {
+                        setCurrentRatingIndex(ratingQuestions.length)
                       }
                     }}
-                    disabled={isAnimating}
-                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition flex items-center justify-center gap-2"
                   >
                     {currentRatingIndex === ratingQuestions.length - 1 ? (
                       <>
@@ -782,7 +758,7 @@ export const Rate: React.FC = () => {
                 </div>
               )}
 
-              {/* Comment Section (after all questions) */}
+              {/* Comment Section */}
               {currentRatingIndex >= ratingQuestions.length && (
                 <div className="space-y-6">
                   <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 text-center">
@@ -840,11 +816,10 @@ export const Rate: React.FC = () => {
 
               {status && (
                 <div
-                  className={`px-4 py-3 rounded-xl text-sm font-semibold ${
-                    status.type === 'error'
-                      ? 'bg-red-50 text-red-700 border border-red-200'
-                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  }`}
+                  className={`px-4 py-3 rounded-xl text-sm font-semibold ${status.type === 'error'
+                    ? 'bg-red-50 text-red-700 border border-red-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}
                 >
                   {status.message}
                 </div>
@@ -862,7 +837,7 @@ export const Rate: React.FC = () => {
               <p className="text-slate-600 mb-6">Your feedback helps the whole crew find better spots.</p>
               <button
                 onClick={() => navigate('/dashboard')}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white font-semibold"
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white font-semibold hover:shadow-lg hover:shadow-indigo-500/30 transition"
               >
                 Back to Dashboard
               </button>
@@ -870,6 +845,20 @@ export const Rate: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   )
 }

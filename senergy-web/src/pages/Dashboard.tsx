@@ -4,6 +4,10 @@ import { useAuth } from '@/context/AuthContext'
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import gsap from 'gsap'
+import Snowfall from 'react-snowfall'
+import { getCountFromServer } from 'firebase/firestore'
+import { AnimatedLogo } from '@/components/dashboard/AnimatedLogo'
+
 
 interface Rating {
   id: string
@@ -36,10 +40,15 @@ export const Dashboard: React.FC = () => {
   // Load real data from Firestore
   useEffect(() => {
     const loadData = async () => {
-      if (!user?.id) return
+      if (!user?.id) {
+        console.log('[Dashboard] No user ID, skipping data load')
+        setLoading(false)
+        return
+      }
 
       try {
-        // Get ratings
+        console.log('[Dashboard] Loading data for user:', user.id)
+
         const ratingsRef = collection(db, 'ratings')
         const ratingsQuery = query(
           ratingsRef,
@@ -47,17 +56,27 @@ export const Dashboard: React.FC = () => {
           orderBy('createdAt', 'desc'),
           limit(5)
         )
+
         const ratingsSnap = await getDocs(ratingsQuery)
-        const ratings = ratingsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rating))
+        const ratings = ratingsSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        } as Rating))
+
         setRecentRatings(ratings)
 
-        // Calculate average score
         const avgScore =
           ratings.length > 0
-            ? Math.round((ratings.reduce((sum, r) => sum + r.overallScore, 0) / ratings.length) * 10) / 10
+            ? Math.round(
+              (ratings.reduce(
+                (sum, r) => sum + (r.overallScore || 0),
+                0
+              ) /
+                ratings.length) *
+              10
+            ) / 10
             : 0
 
-        // Get groups
         const groupsRef = collection(db, 'groups')
         const groupsQuery = query(
           groupsRef,
@@ -65,17 +84,39 @@ export const Dashboard: React.FC = () => {
           orderBy('createdAt', 'desc'),
           limit(5)
         )
+
         const groupsSnap = await getDocs(groupsQuery)
-        const groups = groupsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group))
+        const groups = groupsSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        } as Group))
+
         setRecentGroups(groups)
 
+        const [ratingsCountSnap, groupsCountSnap] = await Promise.all([
+          getCountFromServer(
+            query(ratingsRef, where('userId', '==', user.id))
+          ),
+          getCountFromServer(
+            query(groupsRef, where('members', 'array-contains', user.id))
+          ),
+        ])
+
+        const totalRatings = ratingsCountSnap.data().count
+        const totalGroups = groupsCountSnap.data().count
         setStats({
-          totalRatings: ratings.length,
-          totalGroups: groups.length,
+          totalRatings,
+          totalGroups,
+          avgScore,
+        })
+
+        console.log('[Dashboard] Stats:', {
+          totalRatings,
+          totalGroups,
           avgScore,
         })
       } catch (error) {
-        console.error('Failed to load dashboard data:', error)
+        console.error('[Dashboard] Failed to load dashboard data:', error)
       } finally {
         setLoading(false)
       }
@@ -83,6 +124,7 @@ export const Dashboard: React.FC = () => {
 
     loadData()
   }, [user?.id])
+
 
   // Animations
   useEffect(() => {
@@ -118,6 +160,11 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-neutral-50 via-slate-50 to-blue-50">
+      <Snowfall
+        color="#9333ea"
+        snowflakeCount={25}
+        style={{ position: 'fixed', width: '100vw', height: '100vh', opacity: 0.5 }}
+      />
       {/* Header */}
       <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -160,41 +207,62 @@ export const Dashboard: React.FC = () => {
       <main className="max-w-6xl mx-auto px-4 py-10 space-y-8">
         {/* Personality Card */}
         <div data-animate className="bg-white rounded-2xl shadow-md border border-slate-100 p-8 bg-gradient-to-br from-indigo-600/10 via-purple-600/5 to-pink-600/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Your personality</p>
-              <h2 className="text-3xl font-bold text-slate-900 mt-2">{user?.personalityType || 'Not set'}</h2>
-              <p className="text-slate-600 mt-3 max-w-lg">
-                {user?.personalityType
-                  ? 'Your adjustment factor helps us understand your preferences and find places that match your energy.'
-                  : 'Complete the personality quiz to unlock personalized recommendations.'}
-              </p>
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-6">
+                {/* Animated Logo */}
+                {user?.personalityType && <AnimatedLogo />}
+
+                {/* Text Content */}
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Your personality</p>
+                  <h2 className="text-4xl font-bold text-slate-900 mt-2">{user?.personalityType || 'Not set'}</h2>
+                  <p className="text-slate-600 mt-3">
+                    {user?.personalityType
+                      ? 'Your adjustment factor helps us understand your preferences and find places that match your energy.'
+                      : 'Complete the personality quiz to unlock personalized recommendations.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Energy Scale */}
               {user?.adjustmentFactor !== undefined && (
-                <div className="mt-4 p-4 bg-white rounded-xl border border-slate-100 max-w-sm">
-                  <p className="text-xs font-semibold text-slate-600 mb-2">Energy Scale</p>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
-                    <span>Introvert</span>
-                    <span>Extrovert</span>
+                <div className="mt-6 p-5 bg-white/30 backdrop-blur-sm rounded-xl border border-indigo-200">
+
+
+                  <p className="text-sm font-semibold text-slate-700 mb-3">Energy Scale</p>
+                  <div className="flex items-center justify-between gap-4 text-sm text-slate-600 mb-4">
+                    <span className="font-medium">Introvert</span>
+                    <span className="font-medium">Extrovert</span>
                   </div>
-                  <div className="h-2 bg-gradient-to-r from-indigo-400 to-pink-400 rounded-full relative">
+                  <div className="h-3 bg-gradient-to-r from-indigo-400 to-pink-400 rounded-full relative">
                     <div
-                      className="w-3 h-3 bg-white border-2 border-indigo-600 rounded-full absolute top-1/2 transform -translate-y-1/2"
-                      style={{ left: `calc(${((user.adjustmentFactor + 1) / 2) * 100}% - 6px)` }}
+                      className="w-5 h-5 bg-gradient-to-br from-indigo-500 to-purple-900 border-2 border-white rounded-full absolute top-1/2 -translate-y-1/2 shadow-lg"
+                      style={{ left: `calc(${((user.adjustmentFactor + 1) / 2) * 100}% - 10px)` }}
                     />
                   </div>
+
+
+
+
+
+
                 </div>
               )}
             </div>
+
+            {/* Quiz Button (only if no personality type) */}
             {!user?.personalityType && (
               <button
                 onClick={() => navigate('/quiz')}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg hover:shadow-xl transition"
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg hover:shadow-xl transition flex-shrink-0"
               >
                 Take Quiz
               </button>
             )}
           </div>
         </div>
+
 
         {/* Stats Cards */}
         <div data-animate className="grid gap-4 md:grid-cols-3">
@@ -252,7 +320,9 @@ export const Dashboard: React.FC = () => {
                       {rating.comment && <p className="text-sm text-slate-600 mt-2">{rating.comment}</p>}
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-indigo-600">{rating.overallScore}</p>
+                      <p className="text-2xl font-bold text-indigo-600">
+                        {Number.isFinite(rating.overallScore) ? rating.overallScore : '—'}
+                      </p>
                       <p className="text-xs text-slate-500">/10</p>
                     </div>
                   </div>
@@ -298,11 +368,10 @@ export const Dashboard: React.FC = () => {
                       </p>
                     </div>
                     <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        group.status === 'place_selected'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${group.status === 'place_selected'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-blue-100 text-blue-700'
+                        }`}
                     >
                       {group.status === 'place_selected' ? 'Planned' : 'Planning'}
                     </span>
