@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import gsap from 'gsap'
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import { auth } from '@/services/firebase'
+import axios from 'axios'
 
 export const Register: React.FC = () => {
   const navigate = useNavigate()
@@ -22,6 +25,8 @@ export const Register: React.FC = () => {
   const requirementsRef = useRef<HTMLDivElement>(null)
   const requirementsListRef = useRef<HTMLDivElement>(null)
   const tlRef = useRef<gsap.core.Timeline | null>(null)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+
 
   const calculatePasswordStrength = (pwd: string): { strength: number; label: string; color: string } => {
     let strength = 0
@@ -191,8 +196,66 @@ export const Register: React.FC = () => {
     }
   }, [password])
 
-  const handleGoogleLogin = () => {
-    window.location.href = '/api/auth/google/redirect'
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true)
+      setValidationError('')
+
+      const provider = new GoogleAuthProvider()
+      provider.addScope('profile')
+      provider.addScope('email')
+
+      // Sign in with Google using Firebase popup
+      console.log('[Login] Starting Google sign in...')
+      const result = await signInWithPopup(auth, provider)
+
+      // Get Firebase ID token
+      console.log('[Login] Getting Firebase ID token...')
+      const firebaseIdToken = await result.user.getIdToken()
+
+      console.log('[Login] Got Firebase ID token, sending to backend...')
+
+      // Send token to backend
+      const response = await axios.post('/api/auth/google', { token: firebaseIdToken })
+
+      console.log('[Login] Backend response received, token:', response.data.token.substring(0, 50) + '...')
+
+      // Store the JWT token
+      localStorage.setItem('auth_token', response.data.token)
+      console.log('[Login] Token stored in localStorage')
+
+      // Manually verify the token with the backend
+      console.log('[Login] Verifying token with backend...')
+      try {
+        const verifyResponse = await axios.get('/api/auth/verify', {
+          headers: { Authorization: `Bearer ${response.data.token}` },
+        })
+        
+        console.log('[Login] Token verified, user data received:', verifyResponse.data.user.displayName)
+        
+        // Manually update the auth context by calling the state update
+        // Since we can't directly access setState, we'll dispatch a custom event
+        window.dispatchEvent(new CustomEvent('token-verified', {
+          detail: {
+            user: verifyResponse.data.user,
+            token: response.data.token
+          }
+        }))
+        
+        console.log('[Login] Custom event dispatched, waiting for redirect...')
+      } catch (verifyError) {
+        console.error('[Login] Token verification failed:', verifyError)
+        setValidationError('Authentication verification failed')
+        localStorage.removeItem('auth_token')
+        setIsGoogleLoading(false)
+      }
+      
+    } catch (error: any) {
+      console.error('[Login] Google login error:', error)
+      const errorMsg = error.response?.data?.error || error.message || 'Google login failed'
+      setValidationError(errorMsg)
+      setIsGoogleLoading(false)
+    }
   }
 
   const handleGithubLogin = () => {
@@ -666,16 +729,19 @@ export const Register: React.FC = () => {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-purple-400 hover:text-purple-600 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                disabled={isGoogleLoading || isLoading}
+                className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-purple-400 hover:text-purple-600 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
               >
-                <i className="fab fa-google text-lg group-hover:scale-110 transition-transform duration-200" />
+                {isGoogleLoading && <i className="fas fa-spinner fa-spin" />}
+                {!isGoogleLoading && <i className="fab fa-google text-lg group-hover:scale-110 transition-transform duration-200" />}
                 <span>Google</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleGithubLogin}
-                className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-slate-700 hover:text-slate-900 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                disabled={isLoading}
+                className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-slate-700 hover:text-slate-900 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
               >
                 <i className="fab fa-github text-lg group-hover:scale-110 transition-transform duration-200" />
                 <span>GitHub</span>

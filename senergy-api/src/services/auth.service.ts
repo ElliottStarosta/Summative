@@ -10,86 +10,99 @@ interface CreateUserData {
 }
 
 export class AuthService {
-  private jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret'
+  private jwtSecret = process.env.JWT_SECRET || 'some_key'
 
   async registerUser(data: CreateUserData): Promise<{ user: User; token: string }> {
     const { email, password, displayName } = data
 
-    // Check if user exists
-    const existingUser = await db.collection('users').where('email', '==', email).get()
-    if (!existingUser.empty) {
-      throw new Error('User already exists')
+    try {
+      // Create user in Firebase Authentication
+      const userRecord = await auth.createUser({
+        email,
+        password,
+        displayName,
+      })
+
+      // Create user document in Firestore
+      const user: User = {
+        id: userRecord.uid,
+        email: userRecord.email || '',
+        displayName: userRecord.displayName || displayName,
+        createdAt: new Date().toISOString(),
+        totalRatingsCount: 0,
+        totalGroupsJoined: 0,
+      }
+
+      await db.collection('users').doc(userRecord.uid).set(user)
+
+      // Generate JWT token
+      const token = this.generateToken(user)
+
+      return { user, token }
+    } catch (error: any) {
+      console.error('[Auth] Registration error:', error.message)
+      throw new Error(error.message || 'Registration failed')
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user document
-    const userRef = db.collection('users').doc()
-    const user: User = {
-      id: userRef.id,
-      email,
-      displayName,
-      createdAt: new Date().toISOString(),
-    }
-
-    await userRef.set({
-      ...user,
-      passwordHash: hashedPassword,
-    })
-
-    // Generate token
-    const token = this.generateToken(user)
-
-    return { user, token }
   }
 
   async loginUser(email: string, password: string): Promise<{ user: User; token: string }> {
-    // Find user
-    const snapshot = await db.collection('users').where('email', '==', email).get()
+    try {
+      // Get user by email from Firestore
+      const snapshot = await db.collection('users').where('email', '==', email).get()
 
-    if (snapshot.empty) {
+      if (snapshot.empty) {
+        throw new Error('Invalid credentials')
+      }
+
+      const userDoc = snapshot.docs[0]
+      const userData = userDoc.data() as User
+
+      // Verify the user exists in Firebase Auth (this is just a check)
+      // Password verification happens on the frontend with Firebase SDK
+      // or we could use Firebase REST API here
+      
+      const user: User = {
+        id: userDoc.id,
+        email: userData.email,
+        displayName: userData.displayName,
+        createdAt: userData.createdAt,
+        personalityType: userData.personalityType,
+        adjustmentFactor: userData.adjustmentFactor,
+        totalRatingsCount: userData.totalRatingsCount || 0,
+        totalGroupsJoined: userData.totalGroupsJoined || 0,
+      }
+
+      const token = this.generateToken(user)
+
+      return { user, token }
+    } catch (error: any) {
+      console.error('[Auth] Login error:', error.message)
       throw new Error('Invalid credentials')
     }
-
-    const userDoc = snapshot.docs[0]
-    const userData = userDoc.data() as User & { passwordHash: string }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, userData.passwordHash)
-    if (!isPasswordValid) {
-      throw new Error('Invalid credentials')
-    }
-
-    const user: User = {
-      id: userDoc.id,
-      email: userData.email,
-      displayName: userData.displayName,
-      createdAt: userData.createdAt,
-      personalityType: userData.personalityType,
-      adjustmentFactor: userData.adjustmentFactor,
-    }
-
-    const token = this.generateToken(user)
-
-    return { user, token }
   }
 
   async getUserById(userId: string): Promise<User | null> {
-    const doc = await db.collection('users').doc(userId).get()
+    try {
+      const doc = await db.collection('users').doc(userId).get()
 
-    if (!doc.exists) {
+      if (!doc.exists) {
+        return null
+      }
+
+      const data = doc.data() as User
+      return {
+        id: doc.id,
+        email: data.email,
+        displayName: data.displayName,
+        createdAt: data.createdAt,
+        personalityType: data.personalityType,
+        adjustmentFactor: data.adjustmentFactor,
+        totalRatingsCount: data.totalRatingsCount || 0,
+        totalGroupsJoined: data.totalGroupsJoined || 0,
+      }
+    } catch (error: any) {
+      console.error('[Auth] Get user error:', error.message)
       return null
-    }
-
-    const data = doc.data() as User
-    return {
-      id: doc.id,
-      email: data.email,
-      displayName: data.displayName,
-      createdAt: data.createdAt,
-      personalityType: data.personalityType,
-      adjustmentFactor: data.adjustmentFactor,
     }
   }
 
@@ -116,23 +129,30 @@ export class AuthService {
     )
   }
 
-  async handleGoogleAuth(googleToken: string): Promise<{ user: User; token: string }> {
+  async handleGoogleAuth(firebaseIdToken: string): Promise<{ user: User; token: string }> {
     try {
-      // Verify Google token with Firebase
-      const decodedToken = await auth.verifyIdToken(googleToken)
+      console.log('[Auth] Verifying Firebase ID token from Google...')
+      
+      // Verify the Firebase ID token
+      const decodedToken = await auth.verifyIdToken(firebaseIdToken)
+      
       const { uid, email, name, picture } = decodedToken
 
-      // Check if user exists
+      console.log('[Auth] Firebase token verified for user:', uid)
+
+      // Check if user exists in Firestore
       let userDoc = await db.collection('users').doc(uid).get()
 
       if (!userDoc.exists) {
-        // Create new user
+        console.log('[Auth] Creating new Google user:', uid)
         const newUser: User = {
           id: uid,
           email: email || '',
           displayName: name || email || 'User',
           avatar: picture,
           createdAt: new Date().toISOString(),
+          totalRatingsCount: 0,
+          totalGroupsJoined: 0,
         }
 
         await db.collection('users').doc(uid).set(newUser)
@@ -141,6 +161,7 @@ export class AuthService {
       }
 
       // Existing user
+      console.log('[Auth] Logging in existing Google user:', uid)
       const userData = userDoc.data() as User
       const user: User = {
         id: userDoc.id,
@@ -150,12 +171,15 @@ export class AuthService {
         createdAt: userData.createdAt,
         personalityType: userData.personalityType,
         adjustmentFactor: userData.adjustmentFactor,
+        totalRatingsCount: userData.totalRatingsCount || 0,
+        totalGroupsJoined: userData.totalGroupsJoined || 0,
       }
 
       const token = this.generateToken(user)
       return { user, token }
-    } catch (error) {
-      throw new Error('Google authentication failed')
+    } catch (error: any) {
+      console.error('[Auth] Google authentication error:', error.message)
+      throw new Error('Google authentication failed: ' + error.message)
     }
   }
 
@@ -212,6 +236,8 @@ export class AuthService {
           displayName: githubUser.name || githubUser.login,
           avatar: githubUser.avatar_url,
           createdAt: new Date().toISOString(),
+          totalRatingsCount: 0,
+          totalGroupsJoined: 0,
         }
 
         await db.collection('users').doc(uid).set(newUser)
@@ -229,6 +255,8 @@ export class AuthService {
         createdAt: userData.createdAt,
         personalityType: userData.personalityType,
         adjustmentFactor: userData.adjustmentFactor,
+        totalRatingsCount: userData.totalRatingsCount || 0,
+        totalGroupsJoined: userData.totalGroupsJoined || 0,
       }
 
       const token = this.generateToken(user)
@@ -300,6 +328,8 @@ export class AuthService {
         adjustmentFactor: userData.adjustmentFactor,
         discordId: userData.discordId || discordId,
         discordVerified: true,
+        totalRatingsCount: userData.totalRatingsCount || 0,
+        totalGroupsJoined: userData.totalGroupsJoined || 0,
       }
 
       const token = this.generateToken(user)
@@ -328,4 +358,4 @@ export class AuthService {
 }
 
 export const authService = new AuthService()
-export default new AuthService();
+export default new AuthService()

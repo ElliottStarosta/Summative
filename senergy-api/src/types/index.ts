@@ -4,11 +4,23 @@ export interface User {
   displayName: string
   avatar?: string
   createdAt: string
+  
+  // Personality
   personalityType?: string
   adjustmentFactor?: number
-  passwordHash?: string
+  quizCompletedAt?: string
+  
+  // Discord
   discordId?: string
   discordVerified?: boolean
+  
+  // Location
+  lastRatedPlaceLocation?: { lat: number; lng: number }
+  city?: string
+  
+  // Stats
+  totalRatingsCount: number
+  totalGroupsJoined: number
 }
 
 export interface JWTPayload {
@@ -42,13 +54,16 @@ export interface Rating {
   userId: string
   userAdjustmentFactor: number
   userPersonalityType: string
+  
   placeId: string
   placeName: string
   placeAddress: string
   location: { lat: number; lng: number }
+  
   categories: RatingCategory
   overallScore: number
   comment?: string
+  
   createdAt: string
   updatedAt: string
 }
@@ -70,7 +85,7 @@ export interface Place {
   name: string
   address: string
   location: { lat: number; lng: number }
-  category?: string
+  category: string
   stats: PlaceStats
 }
 
@@ -100,19 +115,62 @@ export interface Group {
   id: string
   createdBy: string
   createdAt: string
+  
   members: string[]
   memberProfiles: { [userId: string]: GroupMember }
+  
   searchLocation: { lat: number; lng: number }
   searchRadius: number
   city?: string
+  
   communityId?: string
   communityName?: string
+  
   recommendedPlaces?: RecommendedPlace[]
   votes: GroupVotes
+  
   finalPlace?: {
     placeId: string
     placeName: string
     selectedAt: string
   }
+  
   status: 'active' | 'place_selected' | 'archived'
+}
+
+export interface Community {
+  id: string
+  name: string
+  icon?: string
+  members: string[]
+  memberCount: number
+  
+  createdAt: string
+  lastActivityAt: string
+  
+  stats: {
+    totalGroups: number
+    totalRatings: number
+    personalityDistribution: {
+      introvert: number
+      ambivert: number
+      extrovert: number
+    }
+    mostPopularPlaces: Array<{ placeId: string; placeName: string; ratingCount: number }>
+  }
+}
+
+export interface UserPreferences {
+  id: string
+  matchMeWithSimilarPersonalities: boolean
+  matchRadius: number
+  notifyOnGroupInvites: boolean
+  notifyOnRecommendations: boolean
+}
+
+export interface AuthState {
+  user: User | null
+  token: string | null
+  isLoading: boolean
+  error: string | null
 }

@@ -5,6 +5,10 @@ import { db } from '@/config/firebase'
 
 const router = Router()
 
+// ============================================
+// EMAIL/PASSWORD AUTHENTICATION
+// ============================================
+
 // Register
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -38,6 +42,10 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 })
 
+// ============================================
+// GOOGLE OAUTH
+// ============================================
+
 // Google OAuth - Redirect to Google
 router.get('/google/redirect', (req: Request, res: Response) => {
   const googleClientId = process.env.GOOGLE_CLIENT_ID
@@ -51,29 +59,40 @@ router.get('/google/redirect', (req: Request, res: Response) => {
     `access_type=offline&` +
     `prompt=consent`
   
+  console.log('[Auth] Redirecting to Google OAuth:', googleAuthUrl.substring(0, 50) + '...')
   res.redirect(googleAuthUrl)
 })
 
-// Google OAuth - Callback
+// Google OAuth - Callback (from Google)
 router.get('/google/callback', async (req: Request, res: Response) => {
   try {
-    const { code } = req.query
+    const { code, error } = req.query
+
+    console.log('[Auth] Google callback received')
+
+    if (error) {
+      console.error('[Auth] Google OAuth error:', error)
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=google_auth_failed`)
+    }
 
     if (!code) {
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_code`)
     }
 
+    // Exchange authorization code for tokens
+    console.log('[Auth] Exchanging authorization code for Google tokens...')
     const result = await authService.handleGoogleAuth(code as string)
     
     // Redirect to frontend with token
+    console.log('[Auth] Google auth successful, redirecting with token')
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${result.token}`)
   } catch (error: any) {
-    console.error('Google callback error:', error)
-    res.redirect(`${process.env.FRONTEND_URL}/login?error=google_auth_failed`)
+    console.error('[Auth] Google callback error:', error.message)
+    res.redirect(`${process.env.FRONTEND_URL}/login?error=google_auth_failed&details=${encodeURIComponent(error.message)}`)
   }
 })
 
-// Google OAuth - Direct token (for mobile/existing flow)
+// Google OAuth - Direct token endpoint (for mobile/SDK flows)
 router.post('/google', async (req: Request, res: Response) => {
   try {
     const { token } = req.body
@@ -82,12 +101,18 @@ router.post('/google', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Token required' })
     }
 
+    console.log('[Auth] Received Google token via POST')
     const result = await authService.handleGoogleAuth(token)
     res.json(result)
   } catch (error: any) {
+    console.error('[Auth] Google auth error:', error.message)
     res.status(400).json({ error: error.message || 'Google auth failed' })
   }
 })
+
+// ============================================
+// GITHUB OAUTH
+// ============================================
 
 // GitHub OAuth - Redirect to GitHub
 router.get('/github/redirect', (req: Request, res: Response) => {
@@ -99,29 +124,40 @@ router.get('/github/redirect', (req: Request, res: Response) => {
     `redirect_uri=${redirectUri}&` +
     `scope=user:email`
   
+  console.log('[Auth] Redirecting to GitHub OAuth')
   res.redirect(githubAuthUrl)
 })
 
-// GitHub OAuth - Callback
+// GitHub OAuth - Callback (from GitHub)
 router.get('/github/callback', async (req: Request, res: Response) => {
   try {
-    const { code } = req.query
+    const { code, error } = req.query
+
+    console.log('[Auth] GitHub callback received')
+
+    if (error) {
+      console.error('[Auth] GitHub OAuth error:', error)
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_auth_failed`)
+    }
 
     if (!code) {
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_code`)
     }
 
+    // Exchange authorization code for tokens
+    console.log('[Auth] Exchanging authorization code for GitHub tokens...')
     const result = await authService.handleGithubAuth(code as string)
     
     // Redirect to frontend with token
+    console.log('[Auth] GitHub auth successful, redirecting with token')
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${result.token}`)
   } catch (error: any) {
-    console.error('GitHub callback error:', error)
-    res.redirect(`${process.env.FRONTEND_URL}/login?error=github_auth_failed`)
+    console.error('[Auth] GitHub callback error:', error.message)
+    res.redirect(`${process.env.FRONTEND_URL}/login?error=github_auth_failed&details=${encodeURIComponent(error.message)}`)
   }
 })
 
-// GitHub OAuth - Direct code (for existing flow)
+// GitHub OAuth - Direct code endpoint (for SDK flows)
 router.post('/github', async (req: Request, res: Response) => {
   try {
     const { code } = req.body
@@ -130,27 +166,18 @@ router.post('/github', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Code required' })
     }
 
+    console.log('[Auth] Received GitHub code via POST')
     const result = await authService.handleGithubAuth(code)
     res.json(result)
   } catch (error: any) {
+    console.error('[Auth] GitHub auth error:', error.message)
     res.status(400).json({ error: error.message || 'GitHub auth failed' })
   }
 })
 
-// Verify Token
-router.get('/verify', authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const user = await authService.getUserById(req.userId!)
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' })
-    }
-
-    res.json({ user })
-  } catch (error: any) {
-    res.status(400).json({ error: error.message })
-  }
-})
+// ============================================
+// DISCORD OAUTH
+// ============================================
 
 // Discord Auth - Get token from Discord ID
 router.post('/discord', async (req: Request, res: Response) => {
@@ -192,6 +219,25 @@ router.post('/discord/verify-code', authMiddleware, async (req: Request, res: Re
     })
   } catch (error: any) {
     res.status(400).json({ error: error.message || 'Failed to generate verification code' })
+  }
+})
+
+// ============================================
+// TOKEN VERIFICATION
+// ============================================
+
+// Verify Token
+router.get('/verify', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = await authService.getUserById(req.userId!)
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    res.json({ user })
+  } catch (error: any) {
+    res.status(400).json({ error: error.message })
   }
 })
 

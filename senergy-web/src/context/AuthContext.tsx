@@ -5,8 +5,6 @@ import axios from 'axios'
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, displayName: string) => Promise<void>
-  loginWithGoogle: (token: string) => Promise<void>
-  loginWithGithub: (code: string) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   updateUserProfile: (partial: Partial<User>) => void
@@ -28,28 +26,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const verifyToken = async () => {
       const token = localStorage.getItem('auth_token')
+      
       if (token) {
         try {
-          // Create axios instance with timeout
+          console.log('[AuthContext] Verifying token on mount...')
           const axiosInstance = axios.create({
-            timeout: 5000, // 5 second timeout
+            timeout: 5000,
           })
 
           const response = await axiosInstance.get('/api/auth/verify', {
             headers: { Authorization: `Bearer ${token}` },
           })
 
+          console.log('[AuthContext] Token verified on mount')
           setState(prev => ({
             ...prev,
             user: response.data.user,
             token,
             isLoading: false,
+            error: null,
           }))
         } catch (error: any) {
-          console.warn('Token verification failed, clearing token:', error.message)
-          // Token is invalid or expired, clear it
+          console.warn('[AuthContext] Token verification failed on mount:', error.message)
           localStorage.removeItem('auth_token')
-          setState(prev => ({ ...prev, isLoading: false, token: null, user: null }))
+          setState(prev => ({ ...prev, isLoading: false, token: null, user: null, error: null }))
         }
       } else {
         setState(prev => ({ ...prev, isLoading: false }))
@@ -57,9 +57,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     verifyToken().catch((error) => {
-      console.error('Error in verifyToken:', error)
+      console.error('[AuthContext] Error in verifyToken:', error)
       setState(prev => ({ ...prev, isLoading: false }))
     })
+  }, [])
+
+  // Listen for custom token-verified event (from Login component)
+  useEffect(() => {
+    const handleTokenVerified = (event: any) => {
+      console.log('[AuthContext] Received token-verified event')
+      const { user, token } = event.detail
+      setState({
+        user,
+        token,
+        isLoading: false,
+        error: null,
+      })
+    }
+
+    window.addEventListener('token-verified', handleTokenVerified)
+    return () => window.removeEventListener('token-verified', handleTokenVerified)
+  }, [])
+
+  // Listen for storage changes (for multi-tab scenarios)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'auth_token') {
+        console.log('[AuthContext] Storage changed from another tab/window')
+        const newToken = e.newValue
+        
+        if (newToken) {
+          setState(prev => ({ ...prev, isLoading: true }))
+          
+          const verifyNewToken = async () => {
+            try {
+              const axiosInstance = axios.create({ timeout: 5000 })
+              const response = await axiosInstance.get('/api/auth/verify', {
+                headers: { Authorization: `Bearer ${newToken}` },
+              })
+              console.log('[AuthContext] New token verified from storage event')
+              setState(prev => ({
+                ...prev,
+                user: response.data.user,
+                token: newToken,
+                isLoading: false,
+                error: null,
+              }))
+            } catch (error: any) {
+              console.error('[AuthContext] New token verification failed:', error.message)
+              localStorage.removeItem('auth_token')
+              setState(prev => ({ ...prev, token: null, user: null, isLoading: false, error: null }))
+            }
+          }
+          verifyNewToken()
+        } else {
+          console.log('[AuthContext] Token cleared from another tab/window')
+          setState(prev => ({ ...prev, token: null, user: null, isLoading: false }))
+        }
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -110,54 +169,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
-  const loginWithGoogle = useCallback(async (token: string) => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }))
-    try {
-      const response = await axios.post('/api/auth/google', { token })
-      const { user, token: authToken } = response.data
-
-      localStorage.setItem('auth_token', authToken)
-      setState({
-        user,
-        token: authToken,
-        isLoading: false,
-        error: null,
-      })
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.message || 'Google login failed'
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: errorMsg,
-      }))
-      throw error
-    }
-  }, [])
-
-  const loginWithGithub = useCallback(async (code: string) => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }))
-    try {
-      const response = await axios.post('/api/auth/github', { code })
-      const { user, token } = response.data
-
-      localStorage.setItem('auth_token', token)
-      setState({
-        user,
-        token,
-        isLoading: false,
-        error: null,
-      })
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.message || 'GitHub login failed'
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: errorMsg,
-      }))
-      throw error
-    }
-  }, [])
-
   const logout = useCallback(() => {
     localStorage.removeItem('auth_token')
     setState({
@@ -180,8 +191,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user: state.user,
     login,
     register,
-    loginWithGoogle,
-    loginWithGithub,
     logout,
     isAuthenticated: !!state.user,
     updateUserProfile,

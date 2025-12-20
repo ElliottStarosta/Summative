@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { auth } from '@/services/firebase'
+import axios from 'axios'
 import gsap from 'gsap'
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { login, isLoading, error } = useAuth()
+  const { login, isLoading, error, isAuthenticated, user } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLDivElement>(null)
   const orbsContainerRef = useRef<HTMLDivElement>(null)
@@ -15,14 +18,82 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [validationError, setValidationError] = useState('')
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
 
-  const handleGoogleLogin = () => {
-  window.location.href = '/api/auth/google/redirect'
-}
+  // Watch for authentication state change
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      console.log('[Login] User authenticated:', user.displayName, '- redirecting to quiz...')
+      navigate('/quiz')
+    }
+  }, [isAuthenticated, user, navigate])
 
-const handleGithubLogin = () => {
-  window.location.href = '/api/auth/github/redirect'
-}
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true)
+      setValidationError('')
+
+      const provider = new GoogleAuthProvider()
+      provider.addScope('profile')
+      provider.addScope('email')
+
+      // Sign in with Google using Firebase popup
+      console.log('[Login] Starting Google sign in...')
+      const result = await signInWithPopup(auth, provider)
+
+      // Get Firebase ID token
+      console.log('[Login] Getting Firebase ID token...')
+      const firebaseIdToken = await result.user.getIdToken()
+
+      console.log('[Login] Got Firebase ID token, sending to backend...')
+
+      // Send token to backend
+      const response = await axios.post('/api/auth/google', { token: firebaseIdToken })
+
+      console.log('[Login] Backend response received, token:', response.data.token.substring(0, 50) + '...')
+
+      // Store the JWT token
+      localStorage.setItem('auth_token', response.data.token)
+      console.log('[Login] Token stored in localStorage')
+
+      // Manually verify the token with the backend
+      console.log('[Login] Verifying token with backend...')
+      try {
+        const verifyResponse = await axios.get('/api/auth/verify', {
+          headers: { Authorization: `Bearer ${response.data.token}` },
+        })
+        
+        console.log('[Login] Token verified, user data received:', verifyResponse.data.user.displayName)
+        
+        // Manually update the auth context by calling the state update
+        // Since we can't directly access setState, we'll dispatch a custom event
+        window.dispatchEvent(new CustomEvent('token-verified', {
+          detail: {
+            user: verifyResponse.data.user,
+            token: response.data.token
+          }
+        }))
+        
+        console.log('[Login] Custom event dispatched, waiting for redirect...')
+      } catch (verifyError) {
+        console.error('[Login] Token verification failed:', verifyError)
+        setValidationError('Authentication verification failed')
+        localStorage.removeItem('auth_token')
+        setIsGoogleLoading(false)
+      }
+      
+    } catch (error: any) {
+      console.error('[Login] Google login error:', error)
+      const errorMsg = error.response?.data?.error || error.message || 'Google login failed'
+      setValidationError(errorMsg)
+      setIsGoogleLoading(false)
+    }
+  }
+
+  const handleGithubLogin = () => {
+    // Use redirect flow for GitHub
+    window.location.href = '/api/auth/github/redirect'
+  }
 
   // Floating animation for background orbs
   useEffect(() => {
@@ -39,7 +110,6 @@ const handleGithubLogin = () => {
           delay: index * 0.2
         })
         
-        // Add rotation for extra movement
         gsap.to(orb, {
           rotation: 360,
           duration: 20 + index * 5,
@@ -55,7 +125,6 @@ const handleGithubLogin = () => {
     if (containerRef.current && formRef.current && logoRef.current) {
       const tl = gsap.timeline()
 
-      // Fade in background
       tl.fromTo(
         containerRef.current,
         { opacity: 0 },
@@ -63,7 +132,6 @@ const handleGithubLogin = () => {
         0
       )
 
-      // Animate logo with bounce
       tl.fromTo(
         logoRef.current,
         { opacity: 0, y: -30, scale: 0.8 },
@@ -77,7 +145,6 @@ const handleGithubLogin = () => {
         0.2
       )
 
-      // Animate form container
       tl.fromTo(
         formRef.current,
         { opacity: 0, y: 40, scale: 0.96 },
@@ -85,7 +152,6 @@ const handleGithubLogin = () => {
         0.4
       )
 
-      // Animate form elements
       const formElements = formRef.current.querySelectorAll('[data-form-item]')
       tl.fromTo(
         formElements,
@@ -112,7 +178,7 @@ const handleGithubLogin = () => {
 
     try {
       await login(email, password)
-      navigate('/dashboard')
+      // Don't navigate here - let useEffect handle it
     } catch (err) {
       // Error is handled by context
     }
@@ -147,19 +213,19 @@ const handleGithubLogin = () => {
       </div>
 
       <div className="relative min-h-screen flex flex-col z-10 py-6">
-        {/* Logo - positioned lower */}
+        {/* Logo */}
         <div ref={logoRef} className="flex justify-center items-center pt-4 pb-8">
-  <div className="flex items-center gap-3 group cursor-pointer">
-    <img 
-      src="./public/logo.png" 
-      alt="Senergy" 
-      className="w-20 h-20 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-    />
-    <span className="text-3xl font-black bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent -ml-3">
-      Senergy
-    </span>
-  </div>
-</div>
+          <div className="flex items-center gap-3 group cursor-pointer">
+            <img 
+              src="/logo.png" 
+              alt="Senergy" 
+              className="w-20 h-20 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
+            />
+            <span className="text-3xl font-black bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent -ml-3">
+              Senergy
+            </span>
+          </div>
+        </div>
 
         {/* Center Form */}
         <div className="flex-1 flex items-center justify-center px-4">
@@ -234,8 +300,7 @@ const handleGithubLogin = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                                className="w-full py-3.5 mt-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group text-base hover:scale-[1.02] active:scale-[0.98]"
-
+                className="w-full py-3.5 mt-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group text-base hover:scale-[1.02] active:scale-[0.98]"
               >
                 {isLoading && <i className="fas fa-spinner fa-spin text-lg" />}
                 {isLoading ? 'Signing in...' : (
@@ -255,25 +320,28 @@ const handleGithubLogin = () => {
             </div>
 
             {/* OAuth Buttons */}
-<div data-form-item className="grid grid-cols-2 gap-4">
-  <button
-    type="button"
-    onClick={handleGoogleLogin}
-    className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-purple-400 hover:text-purple-600 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-  >
-    <i className="fab fa-google text-lg group-hover:scale-110 transition-transform duration-200" />
-    <span>Google</span>
-  </button>
+            <div data-form-item className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={isGoogleLoading || isLoading}
+                className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-purple-400 hover:text-purple-600 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              >
+                {isGoogleLoading && <i className="fas fa-spinner fa-spin" />}
+                {!isGoogleLoading && <i className="fab fa-google text-lg group-hover:scale-110 transition-transform duration-200" />}
+                <span>Google</span>
+              </button>
 
-  <button
-    type="button"
-    onClick={handleGithubLogin}
-    className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-slate-700 hover:text-slate-900 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-  >
-    <i className="fab fa-github text-lg group-hover:scale-110 transition-transform duration-200" />
-    <span>GitHub</span>
-  </button>
-</div>
+              <button
+                type="button"
+                onClick={handleGithubLogin}
+                disabled={isLoading}
+                className="py-3 border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-white hover:border-slate-700 hover:text-slate-900 transition-all duration-200 flex items-center justify-center gap-2.5 text-base group shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              >
+                <i className="fab fa-github text-lg group-hover:scale-110 transition-transform duration-200" />
+                <span>GitHub</span>
+              </button>
+            </div>
 
             {/* Sign Up Link */}
             <div data-form-item className="text-center mt-6 text-slate-600 text-base">
@@ -281,7 +349,6 @@ const handleGithubLogin = () => {
               <Link
                 to="/register"
                 className="text-purple-600 font-bold hover:text-purple-700 transition-colors duration-200 hover:underline decoration-2 underline-offset-2"
-
               >
                 Create one
               </Link>
