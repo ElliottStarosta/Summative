@@ -432,9 +432,7 @@ export const Rate: React.FC = () => {
     setStatus(null)
 
     try {
-      const overallScore = calculateOverallScore()
 
-      // Save to Firebase Firestore
       const ratingData = {
         userId: user.id,
         userAdjustmentFactor: user.adjustmentFactor || 0,
@@ -447,15 +445,10 @@ export const Rate: React.FC = () => {
           lng: selectedPlace.lng || 0,
         },
         categories,
-        overallScore,
         comment: comment.trim(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }
-
-      // Add to Firestore ratings collection
-      await addDoc(collection(db, 'ratings'), ratingData)
-      console.log('Rating saved to Firestore')
 
       // Also sync to backend API
       try {

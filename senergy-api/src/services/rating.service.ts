@@ -185,15 +185,17 @@ export class RatingService {
   /**
    * Private: Calculate overall score from categories
    */
+
+    
+
+   
   private calculateOverallScore(categories: RatingCategory): number {
     const weights = {
+      atmosphere: 0.25,
+      socialEnergy: 0.25,
       crowdSize: 0.15,
       noiseLevel: 0.15,
-      socialEnergy: 0.20,
-      service: 0.20,
-      cleanliness: 0.15,
-      atmosphere: 0.10,
-      accessibility: 0.05,
+      service: 0.2,
     }
 
     const weighted =
@@ -201,9 +203,7 @@ export class RatingService {
       categories.noiseLevel * weights.noiseLevel +
       categories.socialEnergy * weights.socialEnergy +
       categories.service * weights.service +
-      categories.cleanliness * weights.cleanliness +
-      categories.atmosphere * weights.atmosphere +
-      categories.accessibility * weights.accessibility
+      categories.atmosphere * weights.atmosphere
 
     return Math.round(weighted * 10) / 10
   }
@@ -288,9 +288,7 @@ export class RatingService {
           noiseLevel: 0,
           socialEnergy: 0,
           service: 0,
-          cleanliness: 0,
           atmosphere: 0,
-          accessibility: 0,
         },
         lastRatedAt: new Date().toISOString(),
       }
@@ -327,9 +325,7 @@ export class RatingService {
       noiseLevel: 0,
       socialEnergy: 0,
       service: 0,
-      cleanliness: 0,
       atmosphere: 0,
-      accessibility: 0,
     }
 
     Object.keys(avgCategories).forEach(key => {
@@ -389,4 +385,4 @@ export class RatingService {
   }
 }
 
-export const ratingService = new RatingService()
+export const ratingService = new RatingService()  

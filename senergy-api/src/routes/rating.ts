@@ -38,7 +38,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       })
     }
 
-    // Validate categories (simplified to 5 categories)
+    // Validate categories (5 categories)
     const requiredCategories = [
       'atmosphere',
       'service',
@@ -46,6 +46,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       'noiseLevel',
       'socialEnergy',
     ]
+    
     for (const cat of requiredCategories) {
       if (!(cat in categories)) {
         return res.status(400).json({
@@ -66,7 +67,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       userId,
       placeId,
       placeName,
-      placeAddress,
+      placeAddress || '',
       location,
       categories as RatingCategory,
       comment || '',

@@ -40,13 +40,11 @@ export interface QuizSubmission {
 }
 
 export interface RatingCategory {
+  atmosphere: number
+  socialEnergy: number
   crowdSize: number
   noiseLevel: number
-  socialEnergy: number
   service: number
-  cleanliness: number
-  atmosphere: number
-  accessibility: number
 }
 
 export interface Rating {
