@@ -124,6 +124,7 @@ export const Rate: React.FC = () => {
   }
 
   // Search for nearby places with 5 second timeout
+  // Search for nearby places with 5 second timeout
   const searchNearbyPlaces = async (coords: { lat: number; lng: number }, timeoutMs: number = 10000) => {
     const startTime = Date.now()
 
@@ -134,27 +135,18 @@ export const Rate: React.FC = () => {
       { query: 'bar', category: '🍺 Bars & Pubs' },
     ]
 
-    const categorizedResults: { [category: string]: PlaceResult[] } = {}
+    // Create all promises immediately - they start executing right away
+    const allPromises = allQueries.map(({ query, category }) => {
+      const params = new URLSearchParams({
+        query,
+        location: `${coords.lat},${coords.lng}`,
+        radius: '2000',
+      })
 
-    // Search all queries in parallel
-    const allPromises = allQueries.map(({ query, category }) =>
-      (async () => {
-        try {
-          const params = new URLSearchParams({
-            query,
-            location: `${coords.lat},${coords.lng}`,
-            radius: '2000',
-          })
-
-          const resp = await fetch(`/api/places/search?${params.toString()}`)
-          const data = await resp.json()
-
+      return fetch(`/api/places/search?${params.toString()}`)
+        .then(resp => resp.json())
+        .then(data => {
           if (data.success && data.data && data.data.length > 0) {
-            if (!categorizedResults[category]) {
-              categorizedResults[category] = []
-            }
-
-            const existingIds = new Set(categorizedResults[category].map(p => p.id))
             const newPlaces = data.data
               .map((p: any) => ({
                 id: p.id,
@@ -163,26 +155,47 @@ export const Rate: React.FC = () => {
                 lat: p.location?.lat,
                 lng: p.location?.lng,
               }))
-              .filter((p: PlaceResult) => !existingIds.has(p.id))
               .slice(0, 6)
 
-            categorizedResults[category].push(...newPlaces)
             console.log(`✅ Found ${newPlaces.length} ${query} results`)
+            return { category, places: newPlaces }
           }
-        } catch (error) {
+          return { category, places: [] }
+        })
+        .catch(error => {
           console.error(`Search error for "${query}":`, error)
-        }
-      })()
-    )
+          return { category, places: [] }
+        })
+    })
 
+    // Wait for all to complete or timeout
+    let results: Array<{ category: string; places: PlaceResult[] }> = []
     try {
-      await Promise.race([
+      results = await Promise.race([
         Promise.all(allPromises),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+        new Promise<Array<{ category: string; places: PlaceResult[] }>>((_, reject) => 
+          setTimeout(() => reject(new Error('timeout')), timeoutMs)
+        )
       ])
     } catch (error) {
-      console.log('Search timeout, returning results')
+      console.log('Search timeout, returning partial results')
+      // Get whatever results have completed
+      results = await Promise.allSettled(allPromises).then(settled => 
+        settled
+          .filter((r): r is PromiseFulfilledResult<{ category: string; places: PlaceResult[] }> => 
+            r.status === 'fulfilled'
+          )
+          .map(r => r.value)
+      )
     }
+
+    // Build the final categorized results object
+    const categorizedResults: { [category: string]: PlaceResult[] } = {}
+    results.forEach(({ category, places }) => {
+      if (places.length > 0) {
+        categorizedResults[category] = places
+      }
+    })
 
     return categorizedResults
   }
@@ -261,7 +274,7 @@ export const Rate: React.FC = () => {
             setIsLoading(false)
           }
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 500, maximumAge: 0 }
       )
     }
 
@@ -482,7 +495,6 @@ export const Rate: React.FC = () => {
         setCurrentRatingIndex(0)
         setComment('')
         setIsLoading(false)
-        // DON'T reload places - just go back to segment 1
         setSegment(1)
       }, 2000)
     } catch (error: any) {
