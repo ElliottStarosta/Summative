@@ -1,5 +1,6 @@
 import { db } from '@/config/firebase'
 import { User, QuizSubmission } from '@/types'
+import { authService } from './auth.service'
 
 interface QuizQuestionDef {
   id: number
@@ -97,28 +98,28 @@ export class QuizService {
   async submitQuiz(
     userId: string,
     responses: number[]
-  ): Promise<QuizSubmission & { user: User }> {
+  ): Promise<QuizSubmission & { user: User; verificationCode?: string }> {
     // Validate responses
     if (responses.length !== QUIZ_QUESTIONS.length) {
       throw new Error('Invalid number of responses')
     }
-
+  
     if (!responses.every((r) => r >= 1 && r <= 5)) {
       throw new Error('Invalid response values')
     }
-
+  
     // Calculate personality
     const { adjustmentFactor, personalityType, description } =
       this.calculatePersonality(responses)
-
+  
     // Get current user
     const userDoc = await db.collection('users').doc(userId).get()
     if (!userDoc.exists) {
       throw new Error('User not found')
     }
-
+  
     const userData = userDoc.data() as User
-
+  
     // Create quiz submission record
     const quizSubmission: QuizSubmission = {
       userId,
@@ -128,26 +129,33 @@ export class QuizService {
       description,
       timestamp: new Date().toISOString(),
     }
-
+  
     // Save to Firestore
     await db.collection('quizzes').doc(userId).set(quizSubmission, { merge: true })
-
+  
     // Update user profile with personality info
     await db.collection('users').doc(userId).update({
       personalityType,
       adjustmentFactor,
       quizCompletedAt: new Date().toISOString(),
     })
-
+  
     const updatedUser: User = {
       ...userData,
       personalityType,
       adjustmentFactor,
     }
-
+  
+    // Generate verification code if user has Discord ID
+    let verificationCode: string | undefined
+    if (userData.discordId) {
+      verificationCode = await authService.generateVerificationCode(userId, userData.discordId)
+    }
+  
     return {
       ...quizSubmission,
       user: updatedUser,
+      verificationCode,
     }
   }
 

@@ -60,11 +60,22 @@ export const Register: React.FC = () => {
     }
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const discordId = params.get('discordId')
+    
+    if (discordId) {
+      // Store in sessionStorage to link after registration
+      sessionStorage.setItem('pendingDiscordId', discordId)
+    }
+  }, [])
+
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newPassword = e.target.value
     setPassword(newPassword)
   }
 
+  
   useEffect(() => {
     if (!passwordStrengthRef.current) return
 
@@ -361,11 +372,26 @@ export const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setValidationError('')
-
+  
     if (!validateForm()) return
-
+  
     try {
       await register(email, password, displayName)
+      
+      // Link Discord ID if present
+      const pendingDiscordId = sessionStorage.getItem('pendingDiscordId')
+      if (pendingDiscordId) {
+        try {
+          await axios.post('/api/auth/discord/link', 
+            { discordId: pendingDiscordId },
+            { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } }
+          )
+          sessionStorage.removeItem('pendingDiscordId')
+        } catch (error) {
+          console.error('Failed to link Discord ID:', error)
+        }
+      }
+      
       navigate('/quiz')
     } catch (err) {
       // Error is handled by context

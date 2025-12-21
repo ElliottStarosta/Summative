@@ -195,6 +195,30 @@ router.post('/discord', async (req: Request, res: Response) => {
   }
 })
 
+router.post('/discord/link', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!
+    const { discordId } = req.body
+
+    if (!discordId) {
+      return res.status(400).json({ error: 'Discord ID required' })
+    }
+
+    // Update user with Discord ID (not verified yet)
+    await db.collection('users').doc(userId).update({
+      discordId: discordId,
+      discordVerified: false,
+    })
+
+    res.json({ 
+      success: true,
+      message: 'Discord ID linked. Complete the quiz to get your verification code.'
+    })
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to link Discord ID' })
+  }
+})
+
 // Generate verification code for Discord linking
 router.post('/discord/verify-code', authMiddleware, async (req: Request, res: Response) => {
   try {

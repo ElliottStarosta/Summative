@@ -110,9 +110,11 @@ export const Quiz: React.FC = () => {
       setShowResults(true)
 
       // Auto-redirect after showing results
-      setTimeout(() => {
-        navigate('/dashboard')
-      }, 3000)
+      if (!response.data.verificationCode) {
+        setTimeout(() => {
+          navigate('/dashboard')
+        }, 3000)
+      }
     } catch (error) {
       alert('Failed to submit quiz. Please try again.')
       setIsSubmitting(false)
@@ -167,11 +169,11 @@ export const Quiz: React.FC = () => {
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent-400 to-accent-500 flex items-center justify-center mx-auto mb-6">
               <i className="fas fa-check text-white text-3xl" />
             </div>
-
+  
             <h1 className="text-4xl font-bold text-neutral-900 mb-2">Great!</h1>
             <p className="text-neutral-500 mb-8">Your personality profile is ready</p>
           </div>
-
+  
           {/* Results Card */}
           <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
             <div className="text-5xl font-bold text-primary-600 mb-3">
@@ -183,7 +185,7 @@ export const Quiz: React.FC = () => {
             <p className="text-neutral-600 text-sm leading-relaxed">
               {results.description}
             </p>
-
+  
             {/* Adjustment Factor Scale */}
             <div className="mt-8 pt-8 border-t border-neutral-200">
               <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">
@@ -203,12 +205,54 @@ export const Quiz: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* Redirecting Message */}
-          <p className="text-neutral-500 text-sm">
-            <i className="fas fa-spinner fa-spin mr-2" />
-            Redirecting to dashboard...
-          </p>
+  
+          {/* Discord Verification Code */}
+          {results.verificationCode && (
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-2xl shadow-lg p-6 mb-6">
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <i className="fab fa-discord text-indigo-600 text-2xl" />
+                <h3 className="text-lg font-bold text-slate-900">Discord Verification</h3>
+              </div>
+              <p className="text-sm text-slate-600 mb-4">
+                Use this code in Discord with <code className="px-2 py-1 bg-white rounded text-indigo-600 font-mono">/verify</code>
+              </p>
+              <div className="relative">
+                <div className="bg-white border-2 border-indigo-300 rounded-xl p-4 mb-3">
+                  <code className="text-3xl font-bold text-indigo-600 tracking-wider">
+                    {results.verificationCode}
+                  </code>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(results.verificationCode)
+                    alert('Code copied to clipboard!')
+                  }}
+                  className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors"
+                >
+                  <i className="fas fa-copy mr-2" />
+                  Copy Code
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">
+                Code expires in 24 hours
+              </p>
+            </div>
+          )}
+  
+          {/* Redirecting Message or Continue Button */}
+          {results.verificationCode ? (
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="px-6 py-3 bg-gradient-to-r from-primary-600 to-accent-500 text-white font-bold rounded-xl hover:shadow-lg transition-all"
+            >
+              Continue to Dashboard
+            </button>
+          ) : (
+            <p className="text-neutral-500 text-sm">
+              <i className="fas fa-spinner fa-spin mr-2" />
+              Redirecting to dashboard...
+            </p>
+          )}
         </div>
       </div>
     )

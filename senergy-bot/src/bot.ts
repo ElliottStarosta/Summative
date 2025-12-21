@@ -1,4 +1,15 @@
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ContextMenuCommandBuilder, ContextMenuCommandType, ActivityType } from 'discord.js'
+import { 
+  Client, 
+  GatewayIntentBits, 
+  REST, 
+  Routes, 
+  SlashCommandBuilder, 
+  ActivityType,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} from 'discord.js'
 import dotenv from 'dotenv'
 import { api } from './services/api'
 
@@ -18,6 +29,7 @@ export const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
   ],
 })
 
@@ -179,28 +191,155 @@ client.on('ready', () => {
 })
 
 client.on('guildCreate', async (guild: any) => {
-  console.log(`🎉 Bot added to server: ${guild.name} (${guild.id})`)
+  console.log(`🎉 Bot added to server: ${guild.name}`)
   
-  // Send welcome message to default channel
   try {
-    const defaultChannel = guild.systemChannel || guild.channels.cache.find((ch: any) => ch.isTextBased())
-    if (defaultChannel && defaultChannel.isTextBased()) {
-      await defaultChannel.send(
-        `👋 **Welcome to Senergy!**\n\n` +
-        `I help you find places that match your personality and plan group outings.\n\n` +
-        `**Get started:**\n` +
-        `\`/register\` - Create your account\n` +
-        `\`/help\` - See all commands\n\n` +
-        `Let's find your perfect spot! 🎯`
-      )
+    const channel = guild.systemChannel || guild.channels.cache.find((ch: any) => ch.isTextBased())
+    if (channel?.isTextBased()) {
+      const embed = new EmbedBuilder()
+        .setColor(0x6366f1)
+        .setTitle('🎯 Senergy is here!')
+        .setDescription(
+          'Thanks for adding me! I help you find places that match your personality.\n\n' +
+          '**Quick Start:**\n' +
+          '• Use `/register` to create your account\n' +
+          '• Take the personality quiz\n' +
+          '• Use `/verify` with your code\n' +
+          '• Start finding your perfect spots!'
+        )
+        .setFooter({ text: 'Use /help to see all commands' })
+        .setTimestamp()
+
+      const button = new ActionRowBuilder<ButtonBuilder>()
+        .addComponents(
+          new ButtonBuilder()
+            .setLabel('Get Started')
+            .setStyle(ButtonStyle.Link)
+            .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/register`)
+        )
+
+      await channel.send({ embeds: [embed], components: [button] })
     }
   } catch (error) {
     console.error('Failed to send welcome message:', error)
   }
 })
 
+client.on('guildMemberAdd', async (member) => {
+  console.log(`👋 New member: ${member.user.tag}`)
+
+  try {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+    
+    const welcomeEmbed = new EmbedBuilder()
+      .setColor(0x6366f1)
+      .setTitle('🎯 Welcome to Senergy!')
+      .setDescription(
+        `Hey ${member.user.username}! 👋\n\n` +
+        `We help you find places that match your vibe using personality-based recommendations.\n\n` +
+        `**Getting started is easy:**`
+      )
+      .addFields(
+        {
+          name: '1️⃣ Create Account',
+          value: 'Sign up and complete the quick personality quiz',
+          inline: false,
+        },
+        {
+          name: '2️⃣ Get Your Code',
+          value: 'You\'ll receive a verification code after the quiz',
+          inline: false,
+        },
+        {
+          name: '3️⃣ Verify Discord',
+          value: 'Use `/verify [code]` to link your account',
+          inline: false,
+        }
+      )
+      .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+      .setFooter({ 
+        text: 'Senergy • Find your perfect spot',
+        iconURL: member.guild.iconURL() || undefined
+      })
+      .setTimestamp()
+
+    const buttons = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('🚀 Register Now')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${frontendUrl}/register?discordId=${member.user.id}`),
+        
+        new ButtonBuilder()
+          .setLabel('🔑 Login')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${frontendUrl}/login?discordId=${member.user.id}`)
+      )
+
+    const helpButtons = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('📚 Commands')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${frontendUrl}/discord-bot-docs`)
+      )
+
+    await member.send({
+      embeds: [welcomeEmbed],
+      components: [buttons, helpButtons],
+    })
+
+    console.log(`✅ Sent welcome DM to ${member.user.tag}`)
+
+    setTimeout(async () => {
+      const tipsEmbed = new EmbedBuilder()
+        .setColor(0x8b5cf6)
+        .setTitle('💡 What makes Senergy special?')
+        .setDescription(
+          '🎭 **Personality-Based** - Recommendations that match YOUR vibe\n' +
+          '👥 **Group Planning** - Plan with friends using ranked voting\n' +
+          '⭐ **Smart Ratings** - Rate atmosphere, crowd, noise & more\n' +
+          '🤝 **Find Your Squad** - Connect with similar people nearby\n\n' +
+          '_Ready to find your perfect spot?_ 🎯'
+        )
+        .setFooter({ text: 'Click the buttons above to get started ☝️' })
+
+      try {
+        await member.send({ embeds: [tipsEmbed] })
+      } catch (err) {
+        console.log('Could not send follow-up')
+      }
+    }, 5000)
+
+  } catch (error) {
+    console.error(`Failed to DM ${member.user.tag}:`, error)
+    
+    try {
+      if (member.guild.systemChannel) {
+        const fallbackEmbed = new EmbedBuilder()
+          .setColor(0xef4444)
+          .setDescription(
+            `👋 Welcome ${member}! I couldn't DM you. ` +
+            `Check your privacy settings, then click below to register:`
+          )
+
+        const button = new ActionRowBuilder<ButtonBuilder>()
+          .addComponents(
+            new ButtonBuilder()
+              .setLabel('Register Now')
+              .setStyle(ButtonStyle.Link)
+              .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/register?discordId=${member.user.id}`)
+          )
+        
+        await member.guild.systemChannel.send({ embeds: [fallbackEmbed], components: [button] })
+      }
+    } catch (fallbackError) {
+      console.error('Fallback failed:', fallbackError)
+    }
+  }
+})
+
 client.on('interactionCreate', async interaction => {
-  // Handle slash commands
   if (interaction.isChatInputCommand()) {
     const { commandName, options } = interaction
 
@@ -208,39 +347,28 @@ client.on('interactionCreate', async interaction => {
       if (commandName === 'register') {
         await handleRegister(interaction)
       } else if (commandName === 'verify') {
-        const code = options.getString('code')!
-        await handleVerify(interaction, code)
+        await handleVerify(interaction, options.getString('code')!)
       } else if (commandName === 'profile') {
         await handleProfile(interaction)
       } else if (commandName === 'stats') {
         await handleStats(interaction)
       } else if (commandName === 'rate') {
-        const placeName = options.getString('place_name')!
-        await handleRate(interaction, placeName)
+        await handleRate(interaction, options.getString('place_name')!)
       } else if (commandName === 'group') {
-        const subcommand = options.getSubcommand()
-        await handleGroupCommand(interaction, subcommand)
+        await handleGroupCommand(interaction, options.getSubcommand())
       } else if (commandName === 'find-squad') {
-        const distance = options.getString('distance')
-        await handleFindSquad(interaction, distance)
+        await handleFindSquad(interaction, options.getInteger('distance'))
       } else if (commandName === 'help') {
         await handleHelp(interaction)
-      } else {
-        await interaction.reply('❌ Unknown command')
       }
     } catch (error) {
-      console.error(`Error handling command ${commandName}:`, error)
-      await interaction.reply({
-        content: '❌ An error occurred while processing your command',
-        ephemeral: true,
-      })
-    }
-  }
-
-  // Handle button interactions
-  if (interaction.isButton()) {
-    if (interaction.customId.startsWith('vote_')) {
-      await handleVoteButton(interaction)
+      console.error(`Error: ${commandName}:`, error)
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('❌ Oops!')
+        .setDescription('Something went wrong. Please try again.')
+      
+      await interaction.reply({ embeds: [errorEmbed], ephemeral: true })
     }
   }
 })
@@ -267,53 +395,102 @@ async function getUserToken(discordId: string, verificationCode?: string): Promi
 // ============================================
 
 async function handleRegister(interaction: any) {
-  const registrationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/register`
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
   
-  await interaction.reply({
-    content: `👋 Welcome to Senergy!\n\n[Register here](${registrationUrl})\n\nAfter registering, come back and use \`/verify [code]\` to link your Discord account.`,
-    ephemeral: true,
-  })
+  const embed = new EmbedBuilder()
+    .setColor(0x6366f1)
+    .setTitle('🚀 Get Started with Senergy')
+    .setDescription(
+      'Create your account and discover your personality type!\n\n' +
+      '**What you\'ll do:**\n' +
+      '• Quick registration (1 minute)\n' +
+      '• Take personality quiz (2 minutes)\n' +
+      '• Get your verification code\n' +
+      '• Link your Discord with `/verify`'
+    )
+    .setFooter({ text: 'Click the button below to begin' })
+
+  const button = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(
+      new ButtonBuilder()
+        .setLabel('Register Now')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${frontendUrl}/register?discordId=${interaction.user.id}`)
+    )
+  
+  await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
 }
 
 async function handleVerify(interaction: any, code: string) {
-  try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId, code)
+  await interaction.deferReply({ ephemeral: true })
 
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Verification failed. Make sure you've registered and entered the correct verification code.`,
-        ephemeral: true,
-      })
-      return
-    }
+  const token = await getUserToken(interaction.user.id, code)
 
-    await interaction.reply({
-      content: `✅ **Discord account linked!**\n\nYou can now use all Senergy commands. Try \`/profile\` to see your stats!`,
-      ephemeral: true,
-    })
-  } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Verification failed: ${error.message}`,
-      ephemeral: true,
-    })
+  if (!token) {
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle('❌ Verification Failed')
+      .setDescription(
+        '**This could mean:**\n' +
+        '• Invalid or expired code\n' +
+        '• You haven\'t completed the quiz yet\n' +
+        '• Code was already used\n\n' +
+        'Get a new code by completing the personality quiz.'
+      )
+
+    const button = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Take Quiz')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/quiz`)
+      )
+
+    await interaction.editReply({ embeds: [embed], components: [button] })
+    return
   }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x10b981)
+    .setTitle('✅ Discord Linked!')
+    .setDescription(
+      `Welcome to Senergy, ${interaction.user.username}!\n\n` +
+      '**You can now:**\n' +
+      '• View your profile with `/profile`\n' +
+      '• Rate places with `/rate`\n' +
+      '• Create groups with `/group create`\n' +
+      '• Find your squad with `/find-squad`'
+    )
+    .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
+    .setFooter({ text: 'Use /help to see all commands' })
+
+  await interaction.editReply({ embeds: [embed] })
 }
 
 async function handleProfile(interaction: any) {
+  await interaction.deferReply({ ephemeral: true })
+
+  const token = await getUserToken(interaction.user.id)
+
+  if (!token) {
+    const embed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('🔒 Account Not Linked')
+      .setDescription('Link your Discord account to view your profile.')
+
+    const button = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Get Started')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/register?discordId=${interaction.user.id}`)
+      )
+
+    await interaction.editReply({ embeds: [embed], components: [button] })
+    return
+  }
+
   try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId)
-
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Please link your Discord account first with \`/verify [code]\``,
-        ephemeral: true,
-      })
-      return
-    }
-
-    // Get user profile from API
     const profile = await api.getUserProfile(interaction.user.id)
     const ratings = await api.getUserRatings(token, 5)
 
@@ -321,365 +498,403 @@ async function handleProfile(interaction: any) {
       ? (ratings.reduce((sum: number, r: any) => sum + (r.overallScore || 0), 0) / ratings.length).toFixed(1)
       : 'N/A'
 
-    await interaction.reply({
-      content: `👤 **${profile.displayName || interaction.user.username}'s Profile**\n\n` +
-        `**Personality:** ${profile.personalityType || 'Not set'}\n` +
-        `**Adjustment Factor:** ${profile.adjustmentFactor?.toFixed(2) || 'N/A'}\n` +
-        `**Total Ratings:** ${profile.totalRatingsCount || 0}\n` +
-        `**Groups Joined:** ${profile.totalGroupsJoined || 0}\n` +
-        `**Average Score:** ${avgScore}/10\n` +
-        `**City:** ${profile.city || 'Not set'}`,
-      ephemeral: true,
-    })
+    const embed = new EmbedBuilder()
+      .setColor(0x6366f1)
+      .setTitle(`${profile.displayName || interaction.user.username}'s Profile`)
+      .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
+      .addFields(
+        { name: '🎭 Personality', value: profile.personalityType || 'Not set', inline: true },
+        { name: '⚡ Energy Factor', value: profile.adjustmentFactor?.toFixed(2) || 'N/A', inline: true },
+        { name: '📍 Location', value: profile.city || 'Not set', inline: true },
+        { name: '⭐ Total Ratings', value: `${profile.totalRatingsCount || 0}`, inline: true },
+        { name: '👥 Groups Joined', value: `${profile.totalGroupsJoined || 0}`, inline: true },
+        { name: '📊 Avg Score', value: `${avgScore}/10`, inline: true }
+      )
+      .setFooter({ text: 'Keep rating to get better recommendations!' })
+      .setTimestamp()
+
+    const button = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('View Full Profile')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`)
+      )
+
+    await interaction.editReply({ embeds: [embed], components: [button] })
   } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Failed to fetch profile: ${error.message}`,
-      ephemeral: true,
-    })
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle('❌ Error')
+      .setDescription('Could not fetch profile. Try again later.')
+    
+    await interaction.editReply({ embeds: [embed] })
   }
 }
 
 async function handleStats(interaction: any) {
+  await interaction.deferReply({ ephemeral: true })
+
+  const token = await getUserToken(interaction.user.id)
+
+  if (!token) {
+    const embed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('🔒 Account Not Linked')
+      .setDescription('Link your account first with `/verify`')
+
+    await interaction.editReply({ embeds: [embed] })
+    return
+  }
+
   try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId)
+    const [ratings, groups] = await Promise.all([
+      api.getUserRatings(token, 100),
+      api.getUserGroups(token)
+    ])
 
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Please link your Discord account first with \`/verify [code]\``,
-        ephemeral: true,
-      })
-      return
-    }
+    const avgScore = ratings.length > 0
+      ? (ratings.reduce((sum: number, r: any) => sum + r.overallScore, 0) / ratings.length).toFixed(1)
+      : '0.0'
 
-    const ratings = await api.getUserRatings(token, 100)
-    const groups = await api.getUserGroups(token)
+    const embed = new EmbedBuilder()
+      .setColor(0x8b5cf6)
+      .setTitle('📊 Your Senergy Stats')
+      .setDescription('Here\'s your activity summary')
+      .addFields(
+        { name: '⭐ Total Ratings', value: `${ratings.length}`, inline: true },
+        { name: '👥 Total Groups', value: `${groups.length}`, inline: true },
+        { name: '📈 Average Score', value: `${avgScore}/10`, inline: true }
+      )
+      .setFooter({ text: 'Keep exploring to unlock more insights!' })
+      .setTimestamp()
 
-    const totalRatings = ratings.length
-    const totalGroups = groups.length
-    const avgScore = totalRatings > 0
-      ? (ratings.reduce((sum: number, r: any) => sum + (r.overallScore || 0), 0) / totalRatings).toFixed(1)
-      : 'N/A'
-
-    await interaction.reply({
-      content: `📊 **Your Senergy Stats**\n\n` +
-        `**Total Ratings:** ${totalRatings}\n` +
-        `**Total Groups:** ${totalGroups}\n` +
-        `**Average Score:** ${avgScore}/10\n` +
-        `**Recent Ratings:** ${Math.min(totalRatings, 5)}`,
-      ephemeral: true,
-    })
+    await interaction.editReply({ embeds: [embed] })
   } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Failed to fetch stats: ${error.message}`,
-      ephemeral: true,
-    })
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle('❌ Error')
+      .setDescription('Could not fetch stats.')
+    
+    await interaction.editReply({ embeds: [embed] })
   }
 }
 
 async function handleRate(interaction: any, placeName: string) {
-  try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId)
+  const token = await getUserToken(interaction.user.id)
 
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Please link your Discord account first with \`/verify [code]\``,
-        ephemeral: true,
-      })
-      return
-    }
+  if (!token) {
+    const embed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('🔒 Account Not Linked')
+      .setDescription('Link your account to rate places.')
 
-    await interaction.reply({
-      content: `⭐ **Rate: ${placeName}**\n\n` +
-        `To rate a place, please use the web app for the full rating experience.\n` +
-        `Visit: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/rate\n\n` +
-        `_Discord rating form coming soon!_`,
-      ephemeral: true,
-    })
-  } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Error: ${error.message}`,
-      ephemeral: true,
-    })
+    await interaction.reply({ embeds: [embed], ephemeral: true })
+    return
   }
+
+  const embed = new EmbedBuilder()
+    .setColor(0xfbbf24)
+    .setTitle(`⭐ Rate: ${placeName}`)
+    .setDescription(
+      'Use our web app for the full rating experience!\n\n' +
+      '**Rate on:**\n' +
+      '• Atmosphere & vibe\n' +
+      '• Crowd size\n' +
+      '• Noise level\n' +
+      '• Social energy\n' +
+      '• Service quality'
+    )
+    .setFooter({ text: 'Click below to rate this place' })
+
+  const button = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(
+      new ButtonBuilder()
+        .setLabel('Rate Now')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/rate`)
+    )
+
+  await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
 }
 
 async function handleGroupCommand(interaction: any, subcommand: string) {
-  try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId)
+  const token = await getUserToken(interaction.user.id)
 
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Please link your Discord account first with \`/verify [code]\``,
-        ephemeral: true,
-      })
-      return
-    }
+  if (!token) {
+    const embed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('🔒 Account Not Linked')
+      .setDescription('Link your account to use group features.')
 
-    const options = interaction.options
+    await interaction.reply({ embeds: [embed], ephemeral: true })
+    return
+  }
 
-    if (subcommand === 'create') {
-      const location = options.getString('location')
-      
-      // Get user's active groups to find the most recent one
-      const groups = await api.getUserGroups(token)
-      
-      await interaction.reply({
-        content: `✅ **Group created for ${location}**\n\n` +
-          `To create a group with specific members, please use the web app:\n` +
-          `${process.env.FRONTEND_URL || 'http://localhost:5173'}/groups\n\n` +
-          `_Discord group creation with location geocoding coming soon!_`,
-        ephemeral: true,
-      })
-    } else if (subcommand === 'add') {
-      const user = options.getUser('user')
-      
-      await interaction.reply({
-        content: `✅ **Added ${user.username} to your group!**\n\n` +
-          `To manage group members, use the web app:\n` +
-          `${process.env.FRONTEND_URL || 'http://localhost:5173'}/groups`,
-        ephemeral: true,
-      })
-    } else if (subcommand === 'recommend') {
-      const groups = await api.getUserGroups(token)
-      
-      if (groups.length === 0) {
-        await interaction.reply({
-          content: `❌ You don't have any active groups. Create one first with \`/group create\``,
-          ephemeral: true,
-        })
-        return
-      }
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 
-      const activeGroup = groups[0] // Get first active group
-      const recommendations = await api.generateRecommendations(token, activeGroup.id)
+  if (subcommand === 'create') {
+    const location = interaction.options.getString('location')
+    
+    const embed = new EmbedBuilder()
+      .setColor(0x10b981)
+      .setTitle('👥 Create Your Group')
+      .setDescription(
+        `Planning for **${location}**\n\n` +
+        '**On the web app, you can:**\n' +
+        '• Add friends to your group\n' +
+        '• Get AI recommendations\n' +
+        '• Vote with ranked choice\n' +
+        '• Finalize your plans'
+      )
+      .setFooter({ text: 'Click below to set up your group' })
 
-      if (recommendations.length === 0) {
-        await interaction.reply({
-          content: `❌ No recommendations found. Try adjusting your group location or adding more members.`,
-          ephemeral: true,
-        })
-        return
-      }
+    const button = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Create Group')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${frontendUrl}/groups`)
+      )
 
-      const top3 = recommendations.slice(0, 3)
-      const recsText = top3.map((rec: any, idx: number) => 
-        `${['🥇', '🥈', '🥉'][idx]} **${rec.placeName}** - ${rec.predictedScore}/10\n${rec.reasoning}`
-      ).join('\n\n')
+    await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
+  } else if (subcommand === 'recommend') {
+    await interaction.deferReply()
 
-      await interaction.reply({
-        content: `🎯 **Top Recommendations**\n\n${recsText}\n\n_Use \`/group vote\` to vote!_`,
-      })
-    } else if (subcommand === 'vote') {
+    try {
       const groups = await api.getUserGroups(token)
       
       if (groups.length === 0) {
-        await interaction.reply({
-          content: `❌ You don't have any active groups.`,
-          ephemeral: true,
-        })
+        const embed = new EmbedBuilder()
+          .setColor(0xf59e0b)
+          .setTitle('📭 No Active Groups')
+          .setDescription('Create a group first with `/group create`')
+
+        await interaction.editReply({ embeds: [embed] })
         return
       }
 
       const activeGroup = groups[0]
-      const recommendations = activeGroup.recommendedPlaces || []
+      const recommendations = await api.generateRecommendations(token, activeGroup.id)
 
       if (recommendations.length === 0) {
-        await interaction.reply({
-          content: `❌ No recommendations available. Generate them first with \`/group recommend\``,
-          ephemeral: true,
-        })
+        const embed = new EmbedBuilder()
+          .setColor(0xef4444)
+          .setTitle('🤷 No Recommendations')
+          .setDescription('Try adjusting your location or adding more members.')
+
+        await interaction.editReply({ embeds: [embed] })
         return
       }
 
-      await interaction.reply({
-        content: `🗳️ **Ranked Choice Voting**\n\n` +
-          `To vote for your top 3 places, please use the web app:\n` +
-          `${process.env.FRONTEND_URL || 'http://localhost:5173'}/groups\n\n` +
-          `_Discord voting buttons coming soon!_`,
-        ephemeral: true,
-      })
-    } else if (subcommand === 'finalize') {
-      const groups = await api.getUserGroups(token)
+      const top3 = recommendations.slice(0, 3)
       
-      if (groups.length === 0) {
-        await interaction.reply({
-          content: `❌ You don't have any active groups.`,
-          ephemeral: true,
-        })
-        return
-      }
+      const embed = new EmbedBuilder()
+        .setColor(0x6366f1)
+        .setTitle('🎯 Top Recommendations')
+        .setDescription('Based on your group\'s personality profile')
+        .addFields(
+          top3.map((rec: any, idx: number) => ({
+            name: `${['🥇', '🥈', '🥉'][idx]} ${rec.placeName}`,
+            value: `**${rec.predictedScore}/10** • ${rec.reasoning}`,
+            inline: false
+          }))
+        )
+        .setFooter({ text: 'Use /group vote to cast your votes!' })
 
-      await interaction.reply({
-        content: `✅ **Finalize Selection**\n\n` +
-          `To finalize your group's place selection, use the web app:\n` +
-          `${process.env.FRONTEND_URL || 'http://localhost:5173'}/groups\n\n` +
-          `_Discord finalization coming soon!_`,
-        ephemeral: true,
-      })
-    } else if (subcommand === 'cancel') {
-      await interaction.reply({
-        content: `❌ **Group cancelled**\n\nTo cancel a group, use the web app.`,
-        ephemeral: true,
-      })
-    } else if (subcommand === 'history') {
-      const groups = await api.getUserGroups(token)
+      await interaction.editReply({ embeds: [embed] })
+    } catch (error) {
+      const embed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('❌ Error')
+        .setDescription('Could not generate recommendations.')
       
-      if (groups.length === 0) {
-        await interaction.reply({
-          content: `📜 **Your Group History**\n\nNo groups yet. Create your first group with \`/group create\``,
-          ephemeral: true,
-        })
-        return
-      }
-
-      const historyText = groups.slice(0, 5).map((group: any) => {
-        const place = group.finalPlace
-        return place 
-          ? `• **${place.placeName}** - ${group.status === 'place_selected' ? 'Selected' : 'Active'}`
-          : `• Group in ${group.city || 'Unknown'} - ${group.status}`
-      }).join('\n')
-
-      await interaction.reply({
-        content: `📜 **Your Group History**\n\n${historyText}\n\n_View full history on the web app_`,
-        ephemeral: true,
-      })
+      await interaction.editReply({ embeds: [embed] })
     }
-  } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Error: ${error.message}`,
-      ephemeral: true,
-    })
+  } else if (subcommand === 'vote') {
+    const embed = new EmbedBuilder()
+      .setColor(0x8b5cf6)
+      .setTitle('🗳️ Ranked Choice Voting')
+      .setDescription(
+        'Vote for your top 3 places in order of preference.\n\n' +
+        'Use the web app for the full voting experience!'
+      )
+
+    const button = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Vote Now')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${frontendUrl}/groups`)
+      )
+
+    await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
+  } else if (subcommand === 'history') {
+    await interaction.deferReply({ ephemeral: true })
+
+    try {
+      const groups = await api.getUserGroups(token)
+      
+      if (groups.length === 0) {
+        const embed = new EmbedBuilder()
+          .setColor(0xf59e0b)
+          .setTitle('📜 No Group History')
+          .setDescription('Create your first group with `/group create`')
+
+        await interaction.editReply({ embeds: [embed] })
+        return
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x6366f1)
+        .setTitle('📜 Your Group History')
+        .setDescription(
+          groups.slice(0, 5).map((group: any) => {
+            const place = group.finalPlace
+            const status = group.status === 'place_selected' ? '✅' : '⏳'
+            return place 
+              ? `${status} **${place.placeName}**`
+              : `${status} Group in ${group.city || 'Unknown'}`
+          }).join('\n')
+        )
+        .setFooter({ text: `Showing ${Math.min(groups.length, 5)} of ${groups.length} groups` })
+
+      const button = new ActionRowBuilder<ButtonBuilder>()
+        .addComponents(
+          new ButtonBuilder()
+            .setLabel('View Full History')
+            .setStyle(ButtonStyle.Link)
+            .setURL(`${frontendUrl}/groups`)
+        )
+
+      await interaction.editReply({ embeds: [embed], components: [button] })
+    } catch (error) {
+      const embed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('❌ Error')
+        .setDescription('Could not fetch history.')
+      
+      await interaction.editReply({ embeds: [embed] })
+    }
   }
 }
 
-async function handleFindSquad(interaction: any, distance: string | null) {
+async function handleFindSquad(interaction: any, distance: number | null) {
+  await interaction.deferReply({ ephemeral: true })
+
+  const token = await getUserToken(interaction.user.id)
+
+  if (!token) {
+    const embed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('🔒 Account Not Linked')
+      .setDescription('Link your account to find your squad.')
+
+    await interaction.editReply({ embeds: [embed] })
+    return
+  }
+
+  const searchDistance = distance || 50
+
   try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId)
-
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Please link your Discord account first with \`/verify [code]\``,
-        ephemeral: true,
-      })
-      return
-    }
-
-    const searchDistance = distance ? parseInt(distance) : 50
     const matches = await api.findSimilarUsers(token, 0.3, searchDistance)
 
     if (matches.length === 0) {
-      await interaction.reply({
-        content: `👥 **No matches found within ${searchDistance}km**\n\nTry increasing the distance or check back later when more people join!`,
-        ephemeral: true,
-      })
+      const embed = new EmbedBuilder()
+        .setColor(0xf59e0b)
+        .setTitle('👥 No Matches Found')
+        .setDescription(
+          `No one found within ${searchDistance}km.\n\n` +
+          '**Tips:**\n' +
+          '• Try a larger radius\n' +
+          '• Check back later as more people join'
+        )
+
+      await interaction.editReply({ embeds: [embed] })
       return
     }
 
-    const matchesText = matches.slice(0, 5).map((match: any) => 
-      `👤 **${match.displayName}** - ${match.personalityType} (${Math.round(match.similarity * 100)}% match, ${match.distance.toFixed(1)}km)`
-    ).join('\n')
+    const embed = new EmbedBuilder()
+      .setColor(0xec4899)
+      .setTitle('👥 Your Squad')
+      .setDescription(`Found ${matches.length} matches within ${searchDistance}km`)
+      .addFields(
+        matches.slice(0, 5).map((match: any) => ({
+          name: match.displayName,
+          value: `${match.personalityType} • ${Math.round(match.similarity * 100)}% match • ${match.distance.toFixed(1)}km away`,
+          inline: false
+        }))
+      )
+      .setFooter({ text: matches.length > 5 ? `Showing 5 of ${matches.length} matches` : 'All matches shown' })
 
-    await interaction.reply({
-      content: `👥 **Found ${matches.length} matches within ${searchDistance}km**\n\n${matchesText}\n\n_View all matches on the web app_`,
-      ephemeral: true,
-    })
-  } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Error finding matches: ${error.message}`,
-      ephemeral: true,
-    })
+    const button = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('View All Matches')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/matching`)
+      )
+
+    await interaction.editReply({ embeds: [embed], components: [button] })
+  } catch (error) {
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle('❌ Error')
+      .setDescription('Could not find matches.')
+    
+    await interaction.editReply({ embeds: [embed] })
   }
 }
 
 async function handleHelp(interaction: any) {
-  const helpText = `
-🤖 **Senergy Bot Commands**
+  const embed = new EmbedBuilder()
+    .setColor(0x6366f1)
+    .setTitle('🤖 Senergy Bot Commands')
+    .setDescription('Here\'s everything I can help you with!')
+    .addFields(
+      {
+        name: '🚀 Getting Started',
+        value: '`/register` - Create your account\n`/verify` - Link your Discord',
+        inline: false
+      },
+      {
+        name: '👤 Your Profile',
+        value: '`/profile` - View your personality & stats\n`/stats` - Detailed statistics',
+        inline: false
+      },
+      {
+        name: '⭐ Rating Places',
+        value: '`/rate [place]` - Rate a place you visited',
+        inline: false
+      },
+      {
+        name: '👥 Group Planning',
+        value: '`/group create` - Start a group\n`/group recommend` - Get AI recommendations\n`/group vote` - Vote on places\n`/group history` - View past groups',
+        inline: false
+      },
+      {
+        name: '🤝 Find Your Squad',
+        value: '`/find-squad [distance]` - Find people with similar personality nearby',
+        inline: false
+      }
+    )
+    .setFooter({ text: 'Use any command to get started!' })
+    .setTimestamp()
 
-**Getting Started:**
-\`/register\` - Create your Senergy account
-\`/verify\` - Link your Discord account
+  const buttons = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(
+      new ButtonBuilder()
+        .setLabel('📖 Full Documentation')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/discord-bot-docs`),
+      
+      new ButtonBuilder()
+        .setLabel('🌐 Web App')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`)
+    )
 
-**Your Profile:**
-\`/profile\` - View your personality & stats
-\`/stats\` - Detailed statistics
-
-**Rating Places:**
-\`/rate [place]\` - Rate a place you visited
-
-**Group Planning:**
-\`/group create [location]\` - Start a group
-\`/group add [@user]\` - Add members
-\`/group recommend\` - Get recommendations
-\`/group vote\` - Ranked choice voting
-\`/group finalize\` - Lock in final place
-\`/group history\` - View past groups
-
-**Finding Friends:**
-\`/find-squad [distance]\` - Find people nearby with similar personality
-
-**Help:**
-\`/help\` - Show this message
-  `
-
-  await interaction.reply({
-    content: helpText,
-    ephemeral: true,
-  })
-}
-
-async function handleVoteButton(interaction: any) {
-  try {
-    const discordId = interaction.user.id
-    const token = await getUserToken(discordId)
-
-    if (!token) {
-      await interaction.reply({
-        content: `❌ Please link your Discord account first with \`/verify [code]\``,
-        ephemeral: true,
-      })
-      return
-    }
-
-    // Extract place ID from button customId (format: vote_placeId_rank)
-    const parts = interaction.customId.split('_')
-    if (parts.length < 3) {
-      await interaction.reply({
-        content: `❌ Invalid vote button`,
-        ephemeral: true,
-      })
-      return
-    }
-
-    const placeId = parts[1]
-    const rank = parseInt(parts[2])
-
-    // Get user's active group
-    const groups = await api.getUserGroups(token)
-    if (groups.length === 0) {
-      await interaction.reply({
-        content: `❌ You don't have an active group`,
-        ephemeral: true,
-      })
-      return
-    }
-
-    const activeGroup = groups[0]
-    
-    // For now, just acknowledge - full voting implementation would require state management
-    await interaction.reply({
-      content: `✅ Vote recorded for rank ${rank}! Use the web app for full ranked choice voting.`,
-      ephemeral: true,
-    })
-  } catch (error: any) {
-    await interaction.reply({
-      content: `❌ Error recording vote: ${error.message}`,
-      ephemeral: true,
-    })
-  }
+  await interaction.reply({ embeds: [embed], components: [buttons], ephemeral: true })
 }
 
 // ============================================
