@@ -8,7 +8,8 @@ import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  Partials
 } from 'discord.js'
 import dotenv from 'dotenv'
 import { api } from './services/api'
@@ -27,12 +28,15 @@ export const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,           
+    GatewayIntentBits.MessageContent,  
     GatewayIntentBits.GuildMembers,
   ],
+  partials: [
+    Partials.Channel,
+    Partials.Message,
+  ],
 })
-
 // ============================================
 // COMMAND REGISTRY
 // ============================================
@@ -373,6 +377,117 @@ client.on('interactionCreate', async interaction => {
   }
 })
 
+// Handle regular messages (for users typing /verify [code] as text)
+client.on('messageCreate', async message => {
+  // Ignore bot messages and non-DM messages
+  if (message.author.bot) return
+  if (message.guild) return // Only handle DMs
+
+  const content = message.content.trim()
+  
+  // Check for /verify command pattern
+  if (content.match(/^\/verify$/i)) {
+    // User typed /verify without a code
+    const helpEmbed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('⚠️ Verification Code Required')
+      .setDescription(
+        'Please provide your verification code!\n\n' +
+        '**Usage:** `/verify [code]`\n\n' +
+        '**Example:** `/verify 435265`\n\n' +
+        'You can find your verification code on the web app after completing the personality quiz.'
+      )
+    
+    await message.reply({ embeds: [helpEmbed] })
+    return
+  }
+
+  const verifyMatch = content.match(/^\/verify\s+(\d+)$/i)
+  if (verifyMatch) {
+    const code = verifyMatch[1]
+    console.log(`📝 Received /verify command via DM from ${message.author.tag} with code: ${code}`)
+    
+    try {
+      // Send typing indicator
+      await message.channel.sendTyping()
+      
+      // Create a fake interaction-like object for the handler
+      let replyMessage: any = null
+      const fakeInteraction = {
+        user: message.author,
+        reply: async (options: any) => {
+          if (options.embeds) {
+            replyMessage = await message.reply({ embeds: options.embeds, components: options.components })
+          } else if (options.content) {
+            replyMessage = await message.reply({ content: options.content })
+          }
+        },
+        deferReply: async (options: any) => {
+          // Send a typing indicator (already sent above, but this is for compatibility)
+          await message.channel.sendTyping()
+        },
+        editReply: async (options: any) => {
+          // For editReply, send a new message if we don't have a reply yet
+          if (!replyMessage) {
+            if (options.embeds) {
+              replyMessage = await message.reply({ embeds: options.embeds, components: options.components })
+            } else if (options.content) {
+              replyMessage = await message.reply({ content: options.content })
+            }
+          } else {
+            // Try to edit the existing message
+            try {
+              if (options.embeds) {
+                await replyMessage.edit({ embeds: options.embeds, components: options.components })
+              } else if (options.content) {
+                await replyMessage.edit({ content: options.content })
+              }
+            } catch (editError) {
+              // If edit fails, send a new message
+              if (options.embeds) {
+                await message.reply({ embeds: options.embeds, components: options.components })
+              } else if (options.content) {
+                await message.reply({ content: options.content })
+              }
+            }
+          }
+        }
+      }
+      
+      await handleVerify(fakeInteraction, code)
+    } catch (error) {
+      console.error('Error handling verify command from message:', error)
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle('❌ Error')
+        .setDescription('Something went wrong processing your verification code. Please try again.')
+      
+      await message.reply({ embeds: [errorEmbed] })
+    }
+    return
+  }
+
+  // Check for /help command pattern
+  if (content.match(/^\/help$/i)) {
+    try {
+      const fakeInteraction = {
+        user: message.author,
+        reply: async (options: any) => {
+          if (options.embeds) {
+            await message.reply({ embeds: options.embeds, components: options.components })
+          } else if (options.content) {
+            await message.reply({ content: options.content })
+          }
+        }
+      }
+      await handleHelp(fakeInteraction)
+    } catch (error) {
+      console.error('Error handling help command from message:', error)
+    }
+    return
+  }
+})
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -491,7 +606,8 @@ async function handleProfile(interaction: any) {
   }
 
   try {
-    const profile = await api.getUserProfile(interaction.user.id)
+    // Get profile by Discord ID since we have the Discord ID, not Firebase user ID
+    const profile = await api.getUserProfileByDiscordId(interaction.user.id)
     const ratings = await api.getUserRatings(token, 5)
 
     const avgScore = ratings.length > 0

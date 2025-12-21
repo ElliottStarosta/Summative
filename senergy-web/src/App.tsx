@@ -13,6 +13,7 @@ import { Groups } from '@/pages/Groups'
 import { Matching } from '@/pages/Matching'
 import { PlaceDetails } from '@/pages/PlaceDetails'
 import { DiscordBotDocs } from '@/pages/DiscordBotDocs'
+import { DiscordVerify } from '@/pages/DiscordVerify'
 
 
 // Protected Route Component
@@ -41,7 +42,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     !user?.personalityType &&
     location.pathname !== '/rate' &&
     location.pathname !== '/groups' &&
-    location.pathname !== '/matching'
+    location.pathname !== '/matching' &&
+    location.pathname !== '/discord-verify'
   ) {
     return <Navigate to="/quiz" replace />
   }
@@ -84,6 +86,15 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Quiz />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/discord-verify"
+        element={
+          <ProtectedRoute>
+            <DiscordVerify />
           </ProtectedRoute>
         }
       />

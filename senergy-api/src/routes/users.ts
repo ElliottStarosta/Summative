@@ -55,6 +55,60 @@ router.get('/matches', authMiddleware, async (req: Request, res: Response) => {
 })
 
 /**
+ * GET /api/users/discord/:discordId/profile
+ * Get public user profile by Discord ID
+ */
+router.get('/discord/:discordId/profile', async (req: Request, res: Response) => {
+  try {
+    const { discordId } = req.params
+
+    // Find user by Discord ID
+    const snapshot = await db.collection('users').where('discordId', '==', discordId).get()
+
+    if (snapshot.empty) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      })
+    }
+
+    const userDoc = snapshot.docs[0]
+    const userData = userDoc.data()
+
+    if (!userData) {
+      return res.status(404).json({
+        success: false,
+        error: 'User data not found',
+      })
+    }
+
+    // Return only public fields
+    const publicProfile = {
+      id: userDoc.id,
+      displayName: userData.displayName,
+      avatar: userData.avatar || null,
+      personalityType: userData.personalityType || null,
+      adjustmentFactor: userData.adjustmentFactor || 0,
+      totalRatingsCount: userData.totalRatingsCount || 0,
+      totalGroupsJoined: userData.totalGroupsJoined || 0,
+      city: userData.city || null,
+      createdAt: userData.createdAt,
+    }
+
+    res.json({
+      success: true,
+      data: publicProfile,
+    })
+  } catch (error: any) {
+    console.error('Get profile by Discord ID error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch profile',
+    })
+  }
+})
+
+/**
  * GET /api/users/:userId/profile
  * Get public user profile (for matching)
  */

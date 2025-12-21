@@ -99,7 +99,8 @@ export class QuizService {
     userId: string,
     responses: number[]
   ): Promise<QuizSubmission & { user: User; verificationCode?: string }> {
-    // Validate responses
+    console.log('📝 Quiz submission for user:', userId)
+    
     if (responses.length !== QUIZ_QUESTIONS.length) {
       throw new Error('Invalid number of responses')
     }
@@ -108,19 +109,22 @@ export class QuizService {
       throw new Error('Invalid response values')
     }
   
-    // Calculate personality
     const { adjustmentFactor, personalityType, description } =
       this.calculatePersonality(responses)
   
-    // Get current user
     const userDoc = await db.collection('users').doc(userId).get()
     if (!userDoc.exists) {
       throw new Error('User not found')
     }
   
     const userData = userDoc.data() as User
+    console.log('👤 User data:', {
+      id: userData.id,
+      email: userData.email,
+      discordId: userData.discordId,
+      discordVerified: userData.discordVerified
+    })
   
-    // Create quiz submission record
     const quizSubmission: QuizSubmission = {
       userId,
       responses,
@@ -130,27 +134,43 @@ export class QuizService {
       timestamp: new Date().toISOString(),
     }
   
-    // Save to Firestore
     await db.collection('quizzes').doc(userId).set(quizSubmission, { merge: true })
   
-    // Update user profile with personality info
     await db.collection('users').doc(userId).update({
       personalityType,
       adjustmentFactor,
       quizCompletedAt: new Date().toISOString(),
     })
-  
+
+    // Re-read user data to get the latest Discord ID (in case it was just linked)
+    const updatedUserDoc = await db.collection('users').doc(userId).get()
+    const latestUserData = updatedUserDoc.data() as User
+    
+    console.log('👤 Latest user data (after update):', {
+      id: latestUserData.id,
+      email: latestUserData.email,
+      discordId: latestUserData.discordId,
+      discordVerified: latestUserData.discordVerified
+    })
+
     const updatedUser: User = {
-      ...userData,
+      ...latestUserData,
       personalityType,
       adjustmentFactor,
     }
-  
-    // Generate verification code if user has Discord ID
+
     let verificationCode: string | undefined
-    if (userData.discordId) {
-      verificationCode = await authService.generateVerificationCode(userId, userData.discordId)
+    
+    if (latestUserData.discordId) {
+      console.log('🔑 Generating code for Discord ID:', latestUserData.discordId)
+      verificationCode = await authService.generateVerificationCode(userId, latestUserData.discordId)
+      console.log('✅ Generated code:', verificationCode)
+    } else {
+      console.log('⚠️ No Discord ID found in latest user data - skipping code generation')
+      console.log('⚠️ Original user data had discordId?', !!userData.discordId)
     }
+  
+    console.log('📤 Returning result with code?', !!verificationCode)
   
     return {
       ...quizSubmission,

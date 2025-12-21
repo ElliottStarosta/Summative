@@ -38,6 +38,40 @@ export const Quiz: React.FC = () => {
   const [showResults, setShowResults] = useState(false)
   const [results, setResults] = useState<any>(null)
 
+
+  useEffect(() => {
+    const retryDiscordLink = async () => {
+      const retryDiscordId = sessionStorage.getItem('retryDiscordLink')
+      
+      if (retryDiscordId && token) {
+        console.log('🔄 Retrying Discord link from Quiz page...')
+        console.log('Discord ID:', retryDiscordId)
+        console.log('Token:', token?.substring(0, 30))
+        
+        try {
+          const response = await axios.post('/api/auth/discord/link',
+            { discordId: retryDiscordId },
+            { 
+              headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+          console.log('✅ Discord link retry successful:', response.data)
+          sessionStorage.removeItem('retryDiscordLink')
+        } catch (error: any) {
+          console.error('❌ Discord link retry failed:', error)
+          console.error('Error response:', error.response?.data)
+        }
+      }
+    }
+  
+    if (token && !loading) {
+      retryDiscordLink()
+    }
+  }, [token, loading])
+
   // Fetch questions from API
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -88,9 +122,37 @@ export const Quiz: React.FC = () => {
       alert('Please answer all questions before submitting')
       return
     }
-
+  
     setIsSubmitting(true)
+    console.log('📝 Submitting quiz with token:', token?.substring(0, 20) + '...')
+    
     try {
+      // CRITICAL: Ensure Discord ID is linked before submitting quiz
+      const retryDiscordId = sessionStorage.getItem('retryDiscordLink') || sessionStorage.getItem('pendingDiscordId')
+      if (retryDiscordId && token) {
+        console.log('🔗 Linking Discord ID before quiz submission:', retryDiscordId)
+        try {
+          await axios.post('/api/auth/discord/link',
+            { discordId: retryDiscordId },
+            { 
+              headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+          console.log('✅ Discord ID linked successfully before quiz submission')
+          sessionStorage.removeItem('retryDiscordLink')
+          sessionStorage.removeItem('pendingDiscordId')
+          // Wait a moment for the database to update
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (linkError: any) {
+          console.error('❌ Failed to link Discord ID before quiz submission:', linkError)
+          console.error('Error response:', linkError.response?.data)
+          // Continue anyway - maybe it's already linked
+        }
+      }
+      
       const response = await axios.post(
         '/api/quiz/submit',
         { responses },
@@ -98,28 +160,79 @@ export const Quiz: React.FC = () => {
           headers: { Authorization: `Bearer ${token}` },
         }
       )
-
+  
+      console.log('✅ Full quiz response:', response.data)
+      console.log('🔑 Has verificationCode?', !!response.data.verificationCode)
+      console.log('🔑 Code value:', response.data.verificationCode)
+      console.log('👤 User Discord ID from response:', response.data.user?.discordId || 'NONE')
+  
       setResults(response.data)
-      // Update auth user profile so dashboard access is unlocked immediately
+      
       if (response.data?.personalityType || response.data?.adjustmentFactor) {
         updateUserProfile({
           personalityType: response.data.personalityType,
           adjustmentFactor: response.data.adjustmentFactor,
         })
       }
+      
       setShowResults(true)
-
-      // Auto-redirect after showing results
-      if (!response.data.verificationCode) {
-        setTimeout(() => {
+  
+      setTimeout(() => {
+        if (response.data.verificationCode) {
+          console.log('➡️ Redirecting to /discord-verify with code:', response.data.verificationCode)
+          navigate('/discord-verify', {
+            state: { verificationCode: response.data.verificationCode }
+          })
+        } else {
+          console.log('➡️ No code, redirecting to dashboard')
           navigate('/dashboard')
-        }, 3000)
-      }
+        }
+      }, 2000)
+  
     } catch (error) {
+      console.error('❌ Quiz error:', error)
       alert('Failed to submit quiz. Please try again.')
       setIsSubmitting(false)
     }
   }
+
+  // Keyboard navigation for quiz responses
+  useEffect(() => {
+    if (showResults || loading) return
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Only handle number keys 1-5
+      if (e.key >= '1' && e.key <= '5') {
+        const value = parseInt(e.key)
+        handleResponse(value)
+      }
+      // Arrow keys for navigation
+      else if (e.key === 'ArrowLeft' && currentQuestion > 0) {
+        setCurrentQuestion(currentQuestion - 1)
+      } else if (e.key === 'ArrowRight' && currentQuestion < questions.length - 1) {
+        if (responses[currentQuestion] !== 0) {
+          setCurrentQuestion(currentQuestion + 1)
+        }
+      }
+      // Enter key - go to next question if answered, or submit if on last question
+      else if (e.key === 'Enter') {
+        if (responses[currentQuestion] === 0) {
+          // Don't do anything if current question not answered
+          return
+        }
+        if (currentQuestion === questions.length - 1 && responses.every((r) => r !== 0) && !isSubmitting) {
+          // Submit if on last question and all answered
+          handleSubmit()
+        } else if (currentQuestion < questions.length - 1) {
+          // Go to next question if not on last question
+          setCurrentQuestion(currentQuestion + 1)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [currentQuestion, responses, showResults, loading, questions.length, isSubmitting])
 
   // If we somehow finish loading but have no questions, show a friendly message
   if (!loading && questions.length === 0) {
@@ -206,40 +319,8 @@ export const Quiz: React.FC = () => {
             </div>
           </div>
   
-          {/* Discord Verification Code */}
-          {results.verificationCode && (
-            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-2xl shadow-lg p-6 mb-6">
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <i className="fab fa-discord text-indigo-600 text-2xl" />
-                <h3 className="text-lg font-bold text-slate-900">Discord Verification</h3>
-              </div>
-              <p className="text-sm text-slate-600 mb-4">
-                Use this code in Discord with <code className="px-2 py-1 bg-white rounded text-indigo-600 font-mono">/verify</code>
-              </p>
-              <div className="relative">
-                <div className="bg-white border-2 border-indigo-300 rounded-xl p-4 mb-3">
-                  <code className="text-3xl font-bold text-indigo-600 tracking-wider">
-                    {results.verificationCode}
-                  </code>
-                </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(results.verificationCode)
-                    alert('Code copied to clipboard!')
-                  }}
-                  className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors"
-                >
-                  <i className="fas fa-copy mr-2" />
-                  Copy Code
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">
-                Code expires in 24 hours
-              </p>
-            </div>
-          )}
   
-          {/* Redirecting Message or Continue Button */}
+          Redirecting Message or Continue Button
           {results.verificationCode ? (
             <button
               onClick={() => navigate('/dashboard')}

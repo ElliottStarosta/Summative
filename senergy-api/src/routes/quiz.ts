@@ -20,18 +20,31 @@ router.post('/submit', authMiddleware, async (req: Request, res: Response) => {
     const { responses } = req.body
     const userId = req.userId!
 
+    console.log('📝 [Quiz Route] Quiz submission request for user:', userId)
+
     if (!responses || !Array.isArray(responses)) {
       return res.status(400).json({ error: 'Invalid responses format' })
     }
 
     const result = await quizService.submitQuiz(userId, responses)
 
-    res.json({
+    console.log('📤 [Quiz Route] Quiz result:', {
+      hasVerificationCode: !!result.verificationCode,
+      verificationCode: result.verificationCode || 'NONE',
+      userDiscordId: result.user.discordId || 'NONE'
+    })
+
+    const responseData = {
       adjustmentFactor: result.adjustmentFactor,
       personalityType: result.personalityType,
       description: result.description,
       user: result.user,
-    })
+      verificationCode: result.verificationCode, // Include verification code if Discord ID is linked
+    }
+
+    console.log('📤 [Quiz Route] Sending response with verificationCode:', !!responseData.verificationCode)
+
+    res.json(responseData)
   } catch (error: any) {
     console.error('Quiz submit error:', error)
     res.status(400).json({ error: error.message || 'Failed to submit quiz' })

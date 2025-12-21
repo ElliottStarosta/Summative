@@ -161,11 +161,23 @@ export class SenergyAPI {
   }
 
   /**
-   * Get user profile
+   * Get user profile by Firebase user ID
    */
   async getUserProfile(userId: string) {
     try {
       const response = await this.client.get(`/api/users/${userId}/profile`)
+      return response.data.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to fetch profile')
+    }
+  }
+
+  /**
+   * Get user profile by Discord ID
+   */
+  async getUserProfileByDiscordId(discordId: string) {
+    try {
+      const response = await this.client.get(`/api/users/discord/${discordId}/profile`)
       return response.data.data
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to fetch profile')

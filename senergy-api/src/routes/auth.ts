@@ -98,15 +98,24 @@ router.post('/google', async (req: Request, res: Response) => {
     const { token } = req.body
 
     if (!token) {
+      console.error('[Auth] Google auth: Token missing from request')
       return res.status(400).json({ error: 'Token required' })
     }
 
-    console.log('[Auth] Received Google token via POST')
+    console.log('[Auth] Received Google token via POST (length:', token.length, ')')
     const result = await authService.handleGoogleAuth(token)
+    
+    console.log('[Auth] Google auth successful, returning user:', result.user.displayName)
     res.json(result)
   } catch (error: any) {
-    console.error('[Auth] Google auth error:', error.message)
-    res.status(400).json({ error: error.message || 'Google auth failed' })
+    console.error('[Auth] Google auth error:', error)
+    console.error('[Auth] Error stack:', error.stack)
+    const statusCode = error.statusCode || 500
+    const errorMessage = error.message || 'Google authentication failed'
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 })
 

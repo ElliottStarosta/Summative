@@ -132,16 +132,38 @@ export class AuthService {
   async handleGoogleAuth(firebaseIdToken: string): Promise<{ user: User; token: string }> {
     try {
       console.log('[Auth] Verifying Firebase ID token from Google...')
+      console.log('[Auth] Token length:', firebaseIdToken?.length || 0)
+      
+      if (!firebaseIdToken || firebaseIdToken.trim().length === 0) {
+        throw new Error('Firebase ID token is empty or invalid')
+      }
       
       // Verify the Firebase ID token
-      const decodedToken = await auth.verifyIdToken(firebaseIdToken)
+      let decodedToken
+      try {
+        decodedToken = await auth.verifyIdToken(firebaseIdToken)
+      } catch (verifyError: any) {
+        console.error('[Auth] Firebase token verification failed:', verifyError.message)
+        console.error('[Auth] Error code:', verifyError.code)
+        throw new Error(`Firebase token verification failed: ${verifyError.message}`)
+      }
       
       const { uid, email, name, picture } = decodedToken
 
-      console.log('[Auth] Firebase token verified for user:', uid)
+      if (!uid) {
+        throw new Error('Invalid token: missing user ID')
+      }
+
+      console.log('[Auth] Firebase token verified for user:', uid, 'email:', email)
 
       // Check if user exists in Firestore
-      let userDoc = await db.collection('users').doc(uid).get()
+      let userDoc
+      try {
+        userDoc = await db.collection('users').doc(uid).get()
+      } catch (dbError: any) {
+        console.error('[Auth] Firestore read error:', dbError.message)
+        throw new Error(`Database error: ${dbError.message}`)
+      }
 
       if (!userDoc.exists) {
         console.log('[Auth] Creating new Google user:', uid)
@@ -155,20 +177,31 @@ export class AuthService {
           totalGroupsJoined: 0,
         }
 
-        await db.collection('users').doc(uid).set(newUser)
-        const token = this.generateToken(newUser)
-        return { user: newUser, token }
+        try {
+          await db.collection('users').doc(uid).set(newUser)
+          const token = this.generateToken(newUser)
+          console.log('[Auth] New Google user created successfully')
+          return { user: newUser, token }
+        } catch (createError: any) {
+          console.error('[Auth] Error creating user:', createError.message)
+          throw new Error(`Failed to create user: ${createError.message}`)
+        }
       }
 
       // Existing user
       console.log('[Auth] Logging in existing Google user:', uid)
       const userData = userDoc.data() as User
+      
+      if (!userData) {
+        throw new Error('User data is null or undefined')
+      }
+      
       const user: User = {
         id: userDoc.id,
-        email: userData.email,
-        displayName: userData.displayName,
-        avatar: userData.avatar,
-        createdAt: userData.createdAt,
+        email: userData.email || email || '',
+        displayName: userData.displayName || name || email || 'User',
+        avatar: userData.avatar || picture,
+        createdAt: userData.createdAt || new Date().toISOString(),
         personalityType: userData.personalityType,
         adjustmentFactor: userData.adjustmentFactor,
         totalRatingsCount: userData.totalRatingsCount || 0,
@@ -176,10 +209,17 @@ export class AuthService {
       }
 
       const token = this.generateToken(user)
+      console.log('[Auth] Existing Google user logged in successfully')
       return { user, token }
     } catch (error: any) {
-      console.error('[Auth] Google authentication error:', error.message)
-      throw new Error('Google authentication failed: ' + error.message)
+      console.error('[Auth] Google authentication error:', error)
+      console.error('[Auth] Error stack:', error.stack)
+      // Preserve the original error but add context
+      const errorMessage = error.message || 'Unknown error occurred'
+      const authError: any = new Error(`Google authentication failed: ${errorMessage}`)
+      authError.originalError = error
+      authError.statusCode = error.code === 'auth/argument-error' ? 400 : 500
+      throw authError
     }
   }
 

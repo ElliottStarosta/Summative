@@ -64,9 +64,13 @@ export const Register: React.FC = () => {
     const params = new URLSearchParams(window.location.search)
     const discordId = params.get('discordId')
     
+    console.log('🔍 Discord ID from URL:', discordId)
+    
     if (discordId) {
-      // Store in sessionStorage to link after registration
       sessionStorage.setItem('pendingDiscordId', discordId)
+      console.log('✅ Stored Discord ID in sessionStorage:', discordId)
+    } else {
+      console.log('ℹ️ No Discord ID in URL')
     }
   }, [])
 
@@ -376,25 +380,60 @@ export const Register: React.FC = () => {
     if (!validateForm()) return
   
     try {
+      console.log('📝 Starting registration...')
+      
+      // Register the user
       await register(email, password, displayName)
       
-      // Link Discord ID if present
+      console.log('✅ Registration successful')
+      
+      // IMPORTANT: Wait for auth context to update and token to be stored
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      // Check if we have a pending Discord ID
       const pendingDiscordId = sessionStorage.getItem('pendingDiscordId')
+      console.log('🔍 Checking for pending Discord ID:', pendingDiscordId)
+      
       if (pendingDiscordId) {
-        try {
-          await axios.post('/api/auth/discord/link', 
-            { discordId: pendingDiscordId },
-            { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } }
-          )
-          sessionStorage.removeItem('pendingDiscordId')
-        } catch (error) {
-          console.error('Failed to link Discord ID:', error)
+        const token = localStorage.getItem('auth_token')
+        console.log('🔑 Token status:', token ? 'EXISTS' : 'MISSING')
+        console.log('🔑 Token value (first 30 chars):', token?.substring(0, 30))
+        
+        if (token) {
+          try {
+            console.log('🔗 Attempting to link Discord ID...')
+            const response = await axios.post('/api/auth/discord/link', 
+              { discordId: pendingDiscordId },
+              { 
+                headers: { 
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                } 
+              }
+            )
+            console.log('✅ Discord ID linked successfully:', response.data)
+            sessionStorage.removeItem('pendingDiscordId')
+          } catch (linkError: any) {
+            console.error('❌ Failed to link Discord ID:', linkError)
+            console.error('Error response:', linkError.response?.data)
+            
+            // Store for retry later
+            sessionStorage.setItem('retryDiscordLink', pendingDiscordId)
+          }
+        } else {
+          console.log('⚠️ No token found, storing Discord ID for later')
+          sessionStorage.setItem('retryDiscordLink', pendingDiscordId)
         }
+      } else {
+        console.log('ℹ️ No Discord ID to link')
       }
       
+      console.log('➡️ Navigating to quiz')
       navigate('/quiz')
-    } catch (err) {
-      // Error is handled by context
+      
+    } catch (err: any) {
+      console.error('❌ Registration error:', err)
+      // Error already handled by auth context
     }
   }
 
