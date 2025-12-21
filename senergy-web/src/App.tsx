@@ -12,6 +12,8 @@ import { Rate } from '@/pages/Rate'
 import { Groups } from '@/pages/Groups'
 import { Matching } from '@/pages/Matching'
 import { PlaceDetails } from '@/pages/PlaceDetails'
+import { DiscordBotDocs } from '@/pages/DiscordBotDocs'
+
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -82,6 +84,15 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Quiz />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/discord-bot-docs"
+        element={
+          <ProtectedRoute>
+            <DiscordBotDocs />
           </ProtectedRoute>
         }
       />

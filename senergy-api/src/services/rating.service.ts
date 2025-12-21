@@ -186,8 +186,6 @@ export class RatingService {
    * Private: Calculate overall score from categories
    */
 
-    
-
    
   private calculateOverallScore(categories: RatingCategory): number {
     const weights = {

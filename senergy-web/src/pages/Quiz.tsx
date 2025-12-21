@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import axios from 'axios'
@@ -29,8 +29,6 @@ export const Quiz: React.FC = () => {
   const navigate = useNavigate()
   const { token, updateUserProfile } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
-  const questionCardRef = useRef<HTMLDivElement>(null)
-  const prevQuestionRef = useRef<number>(0)
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,7 +37,6 @@ export const Quiz: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [results, setResults] = useState<any>(null)
-  const [isAnimating, setIsAnimating] = useState(false)
 
   // Fetch questions from API
   useEffect(() => {
@@ -70,61 +67,15 @@ export const Quiz: React.FC = () => {
     }
   }, [token])
 
-  // Initial fade in
   useEffect(() => {
-    if (containerRef.current && !loading) {
+    if (containerRef.current) {
       gsap.fromTo(
         containerRef.current,
         { opacity: 0 },
         { opacity: 1, duration: 0.4, ease: 'power2.out' }
       )
     }
-  }, [loading])
-
-  // Question transition animation
-  useEffect(() => {
-    // Skip animation on initial load
-    if (prevQuestionRef.current === 0 && currentQuestion === 0) {
-      prevQuestionRef.current = currentQuestion
-      return
-    }
-
-    if (questionCardRef.current && !loading && prevQuestionRef.current !== currentQuestion) {
-      const isMovingForward = currentQuestion > prevQuestionRef.current
-      const card = questionCardRef.current
-
-      setIsAnimating(true)
-
-      // Create timeline for smooth transition
-      const tl = gsap.timeline({
-        onComplete: () => {
-          setIsAnimating(false)
-        },
-      })
-
-      // Slide out current question
-      tl.to(card, {
-        x: isMovingForward ? '-100%' : '100%',
-        opacity: 0,
-        duration: 0.3,
-        ease: 'power2.in',
-      })
-        // Reset position for new question (off-screen opposite side)
-        .set(card, {
-          x: isMovingForward ? '100%' : '-100%',
-          opacity: 0,
-        })
-        // Slide in new question
-        .to(card, {
-          x: 0,
-          opacity: 1,
-          duration: 0.4,
-          ease: 'power2.out',
-        })
-
-      prevQuestionRef.current = currentQuestion
-    }
-  }, [currentQuestion, loading])
+  }, [currentQuestion, showResults])
 
   const handleResponse = (value: number) => {
     const newResponses = [...responses]
@@ -132,7 +83,7 @@ export const Quiz: React.FC = () => {
     setResponses(newResponses)
   }
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = async () => {
     if (responses.some((r) => r === 0)) {
       alert('Please answer all questions before submitting')
       return
@@ -166,45 +117,7 @@ export const Quiz: React.FC = () => {
       alert('Failed to submit quiz. Please try again.')
       setIsSubmitting(false)
     }
-  }, [responses, token, updateUserProfile, navigate])
-
-  // Keyboard shortcuts for 1-5 keys and Enter to go to next
-  useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      // Only handle if not in results view and not typing in an input
-      if (showResults || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        return
-      }
-
-      const key = event.key
-      // Check if key is 1-5
-      if (key >= '1' && key <= '5') {
-        const value = parseInt(key, 10)
-        const newResponses = [...responses]
-        newResponses[currentQuestion] = value
-        setResponses(newResponses)
-      }
-      // Enter key to go to next question or submit
-      else if (key === 'Enter') {
-        // Only proceed if current question has been answered and not animating
-        if (responses[currentQuestion] !== 0 && !isAnimating) {
-          // If last question and all answered, submit
-          if (currentQuestion === questions.length - 1 && responses.every((r) => r !== 0)) {
-            handleSubmit()
-          }
-          // Otherwise go to next question
-          else if (currentQuestion < questions.length - 1) {
-            setCurrentQuestion(Math.min(questions.length - 1, currentQuestion + 1))
-          }
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyPress)
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress)
-    }
-  }, [showResults, currentQuestion, responses, questions.length, handleSubmit, isAnimating])
+  }
 
   // If we somehow finish loading but have no questions, show a friendly message
   if (!loading && questions.length === 0) {
@@ -306,7 +219,7 @@ export const Quiz: React.FC = () => {
       ref={containerRef}
       className="min-h-screen bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50 flex items-center justify-center p-4"
     >
-      <div className="w-full max-w-2xl" style={{ overflow: 'hidden' }}>
+      <div className="w-full max-w-2xl">
         {/* Progress */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
@@ -332,15 +245,18 @@ export const Quiz: React.FC = () => {
         </div>
 
         {/* Question Card */}
-        <div
-          ref={questionCardRef}
-          className="bg-white rounded-2xl shadow-lg p-8 mb-6"
-          style={{ willChange: 'transform' }}
-        >
+        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
           {/* Question Text */}
-          <h3 className="text-2xl font-bold mb-8 leading-tight" style={{ color: '#1a0a2e' }}>
+          <h3 className="text-2xl font-bold text-neutral-900 mb-8 leading-tight">
             {question.text}
           </h3>
+
+          {/* Scale Labels */}
+          <div className="flex justify-between text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-6">
+            <span>Strongly Disagree</span>
+            <span>Neutral</span>
+            <span>Strongly Agree</span>
+          </div>
 
           {/* Response Options */}
           <div className="flex gap-3 mb-8">
@@ -350,10 +266,9 @@ export const Quiz: React.FC = () => {
                 onClick={() => handleResponse(value)}
                 className={`flex-1 py-4 px-2 rounded-lg font-semibold transition-all transform ${
                   responses[currentQuestion] === value
-                    ? 'bg-gradient-to-br from-indigo-700 to-purple-700 text-white shadow-lg scale-105 hover:from-indigo-800 hover:to-purple-800'
-                    : 'bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200'
+                    ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg scale-105'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                 }`}
-                title={`Press ${value} on your keyboard`}
               >
                 <div className="text-lg mb-1">{value}</div>
                 <div className="text-xs">
@@ -370,20 +285,16 @@ export const Quiz: React.FC = () => {
           {/* Description */}
           <p className="text-sm text-neutral-500 text-center">
             {responses[currentQuestion] === 0
-              ? 'Select your response (or press 1-5) to enable the Next button'
-              : 'Press Enter or use the Next button below to move to the next question'}
+              ? 'Select your response to enable the Next button'
+              : 'Use the Next button below to move to the next question'}
           </p>
         </div>
 
         {/* Navigation */}
         <div className="flex gap-4">
           <button
-            onClick={() => {
-              if (!isAnimating) {
-                setCurrentQuestion(Math.max(0, currentQuestion - 1))
-              }
-            }}
-            disabled={currentQuestion === 0 || isAnimating}
+            onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
+            disabled={currentQuestion === 0}
             className="flex-1 py-3 bg-neutral-100 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <i className="fas fa-chevron-left" />
@@ -393,21 +304,17 @@ export const Quiz: React.FC = () => {
           {currentQuestion === questions.length - 1 && responses.every((r) => r !== 0) ? (
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting || isAnimating}
-              className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-purple-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="flex-1 py-3 bg-gradient-to-r from-accent-400 to-accent-500 text-white font-semibold rounded-lg hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting && <i className="fas fa-spinner fa-spin" />}
               {isSubmitting ? 'Submitting...' : 'Complete Quiz'}
             </button>
           ) : (
             <button
-              onClick={() => {
-                if (!isAnimating) {
-                  setCurrentQuestion(Math.min(questions.length - 1, currentQuestion + 1))
-                }
-              }}
-              disabled={responses[currentQuestion] === 0 || isAnimating}
-              className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-purple-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              onClick={() => setCurrentQuestion(Math.min(questions.length - 1, currentQuestion + 1))}
+              disabled={responses[currentQuestion] === 0}
+              className="flex-1 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-lg hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               Next
               <i className="fas fa-chevron-right" />

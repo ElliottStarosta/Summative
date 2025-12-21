@@ -17,6 +17,14 @@ interface PlaceResult {
   lng?: number
 }
 
+const ratingQuestions = [
+  { key: 'atmosphere' as const, label: 'Atmosphere', hint: 'Overall vibe & feel', description: 'How was the overall atmosphere of this place?' },
+  { key: 'socialEnergy' as const, label: 'Social Energy', hint: 'Social intensity', description: 'How socially engaging was the environment?' },
+  { key: 'crowdSize' as const, label: 'Crowd Size', hint: 'Empty to packed', description: 'How crowded was it?' },
+  { key: 'noiseLevel' as const, label: 'Noise Level', hint: 'Quiet to loud', description: 'How noisy was the environment?' },
+  { key: 'service' as const, label: 'Service Quality', hint: 'Service quality', description: 'How was the service?' },
+]
+
 export const Rate: React.FC = () => {
   const { user, token } = useAuth()
   const navigate = useNavigate()
@@ -44,18 +52,26 @@ export const Rate: React.FC = () => {
     noiseLevel: 5,
     socialEnergy: 5,
   })
+  const questionCardRef = useRef<HTMLDivElement>(null)
+  const sliderContainerRef = useRef<HTMLDivElement>(null)
   const [currentRatingIndex, setCurrentRatingIndex] = useState(0)
   const [comment, setComment] = useState('')
   const categoryRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+  const hasInitializedSearch = useRef(false)
+  const commentSectionRef = useRef<HTMLDivElement>(null)
+  const overallScoreRef = useRef<HTMLDivElement>(null)
+  const scoreTextRef = useRef<HTMLParagraphElement>(null)
+  const completedTextRef = useRef<HTMLParagraphElement>(null)
+  const commentBoxRef = useRef<HTMLDivElement>(null)
+  const buttonsRef = useRef<HTMLDivElement>(null)
+  const hasAnimatedCommentSection = useRef(false)
+  const successIconRef = useRef<HTMLDivElement>(null)
+  const successCheckRef = useRef<HTMLElement>(null)
+  const successTitleRef = useRef<HTMLHeadingElement>(null)
+  const successDescRef = useRef<HTMLParagraphElement>(null)
+  const successRedirectRef = useRef<HTMLParagraphElement>(null)
+  const hasAnimatedSuccess = useRef(false)
 
-  // Rating questions in order
-  const ratingQuestions = [
-    { key: 'atmosphere' as const, label: 'Atmosphere', hint: 'Overall vibe & feel', description: 'How was the overall atmosphere of this place?' },
-    { key: 'socialEnergy' as const, label: 'Social Energy', hint: 'Social intensity', description: 'How socially engaging was the environment?' },
-    { key: 'crowdSize' as const, label: 'Crowd Size', hint: 'Empty to packed', description: 'How crowded was it?' },
-    { key: 'noiseLevel' as const, label: 'Noise Level', hint: 'Quiet to loud', description: 'How noisy was the environment?' },
-    { key: 'service' as const, label: 'Service Quality', hint: 'Service quality', description: 'How was the service?' },
-  ]
   const headerIconRef = useRef<HTMLDivElement>(null)
 
 
@@ -71,6 +87,116 @@ export const Rate: React.FC = () => {
       })
     }
   }, [])
+
+  // Animate comment section when it appears
+  useEffect(() => {
+    if (segment === 2 && currentRatingIndex === ratingQuestions.length && !hasAnimatedCommentSection.current) {
+      hasAnimatedCommentSection.current = true
+
+      // Animate overall score with rotation and bounce
+      if (overallScoreRef.current) {
+        gsap.fromTo(overallScoreRef.current,
+          { scale: 0.5, opacity: 0, rotation: -10 },
+          { scale: 1, opacity: 1, rotation: 0, duration: 0.6, ease: 'back.out(1.7)' }
+        )
+      }
+
+      // Animate score text
+      if (scoreTextRef.current) {
+        gsap.fromTo(scoreTextRef.current,
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, delay: 0.2, ease: 'power2.out' }
+        )
+      }
+
+      // Animate completed text
+      if (completedTextRef.current) {
+        gsap.fromTo(completedTextRef.current,
+          { y: 10, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, delay: 0.4, ease: 'power2.out' }
+        )
+      }
+
+      // Animate comment box
+      if (commentBoxRef.current) {
+        gsap.fromTo(commentBoxRef.current,
+          { y: 30, opacity: 0, scale: 0.95 },
+          { y: 0, opacity: 1, scale: 1, duration: 0.6, delay: 0.5, ease: 'power3.out' }
+        )
+      }
+
+      // Animate buttons
+      if (buttonsRef.current) {
+        gsap.fromTo(buttonsRef.current,
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, delay: 0.7, ease: 'power2.out' }
+        )
+      }
+    }
+
+    // Reset animation flag when leaving comment section
+    if (currentRatingIndex < ratingQuestions.length) {
+      hasAnimatedCommentSection.current = false
+    }
+  }, [segment, currentRatingIndex])
+
+  // Animate success screen
+  useEffect(() => {
+    if (segment === 3 && !hasAnimatedSuccess.current) {
+      hasAnimatedSuccess.current = true
+
+      if (successIconRef.current) {
+        gsap.fromTo(successIconRef.current,
+          { scale: 0, rotation: -180 },
+          {
+            scale: 1,
+            rotation: 0,
+            duration: 0.8,
+            ease: 'elastic.out(1, 0.5)',
+            onComplete: () => {
+              if (successIconRef.current) {
+                gsap.to(successIconRef.current, {
+                  scale: 1.1,
+                  duration: 0.4,
+                  yoyo: true,
+                  repeat: 1,
+                  ease: 'power2.inOut'
+                })
+              }
+            }
+          }
+        )
+      }
+
+      if (successCheckRef.current) {
+        gsap.fromTo(successCheckRef.current,
+          { opacity: 0, scale: 0 },
+          { opacity: 1, scale: 1, duration: 0.4, delay: 0.4, ease: 'back.out(2)' }
+        )
+      }
+
+      if (successTitleRef.current) {
+        gsap.fromTo(successTitleRef.current,
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.6, delay: 0.5, ease: 'power3.out' }
+        )
+      }
+
+      if (successDescRef.current) {
+        gsap.fromTo(successDescRef.current,
+          { y: 10, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, delay: 0.7, ease: 'power2.out' }
+        )
+      }
+
+      if (successRedirectRef.current) {
+        gsap.fromTo(successRedirectRef.current,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.5, delay: 0.9, ease: 'power2.out' }
+        )
+      }
+    }
+  }, [segment])
 
   const headerRef = useRef<HTMLDivElement>(null)
 
@@ -124,7 +250,6 @@ export const Rate: React.FC = () => {
   }
 
   // Search for nearby places with 5 second timeout
-  // Search for nearby places with 5 second timeout
   const searchNearbyPlaces = async (coords: { lat: number; lng: number }, timeoutMs: number = 10000) => {
     const startTime = Date.now()
 
@@ -173,16 +298,16 @@ export const Rate: React.FC = () => {
     try {
       results = await Promise.race([
         Promise.all(allPromises),
-        new Promise<Array<{ category: string; places: PlaceResult[] }>>((_, reject) => 
+        new Promise<Array<{ category: string; places: PlaceResult[] }>>((_, reject) =>
           setTimeout(() => reject(new Error('timeout')), timeoutMs)
         )
       ])
     } catch (error) {
       console.log('Search timeout, returning partial results')
       // Get whatever results have completed
-      results = await Promise.allSettled(allPromises).then(settled => 
+      results = await Promise.allSettled(allPromises).then(settled =>
         settled
-          .filter((r): r is PromiseFulfilledResult<{ category: string; places: PlaceResult[] }> => 
+          .filter((r): r is PromiseFulfilledResult<{ category: string; places: PlaceResult[] }> =>
             r.status === 'fulfilled'
           )
           .map(r => r.value)
@@ -204,11 +329,16 @@ export const Rate: React.FC = () => {
 
   // Get user location and search for nearby places on mount
   useEffect(() => {
+    // Prevent multiple initializations
+    if (hasInitializedSearch.current) return
+
     if (!navigator.geolocation) {
       setStatus({ type: 'error', message: 'Geolocation is not supported' })
       return
     }
 
+    // Mark as initialized immediately
+    hasInitializedSearch.current = true
     let retryAttempted = false
 
     const attemptGeolocation = () => {
@@ -257,6 +387,7 @@ export const Rate: React.FC = () => {
           } catch (error) {
             console.error('Error:', error)
             setStatus({ type: 'error', message: 'Failed to find places' })
+            hasInitializedSearch.current = false // Reset on error so user can retry
           } finally {
             setIsLoading(false)
           }
@@ -272,14 +403,15 @@ export const Rate: React.FC = () => {
           } else {
             setStatus({ type: 'error', message: 'Unable to get your location' })
             setIsLoading(false)
+            hasInitializedSearch.current = false // Reset on failure so user can retry
           }
         },
-        { enableHighAccuracy: true, timeout: 500, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       )
     }
 
     attemptGeolocation()
-  }, [])
+  }, []) // Empty dependency array - only run once on mount
 
   // Segment animation
   useEffect(() => {
@@ -296,8 +428,8 @@ export const Rate: React.FC = () => {
     if (segment === 3) {
       const timer = setTimeout(() => {
         navigate('/dashboard')
-      }, 2000)
-      
+      }, 3000)
+
       return () => clearTimeout(timer)
     }
   }, [segment, navigate])
@@ -313,17 +445,14 @@ export const Rate: React.FC = () => {
     }
   }, [selectedCategory])
 
-  // Rating question text transition animation ONLY
+  // Rating question text transition animation AND keyboard handling
   useEffect(() => {
     if (segment !== 2) return
 
     // Skip animation on initial load
     if (prevRatingIndexRef.current === 0 && currentRatingIndex === 0) {
       prevRatingIndexRef.current = currentRatingIndex
-      return
-    }
-
-    if (questionTextRef.current && prevRatingIndexRef.current !== currentRatingIndex) {
+    } else if (questionTextRef.current && prevRatingIndexRef.current !== currentRatingIndex && currentRatingIndex < ratingQuestions.length) {
       const isMovingForward = currentRatingIndex > prevRatingIndexRef.current
       const questionText = questionTextRef.current
 
@@ -351,15 +480,80 @@ export const Rate: React.FC = () => {
 
       prevRatingIndexRef.current = currentRatingIndex
     }
-  }, [currentRatingIndex, segment])
 
-  // Smooth slider animation when changing questions (GSAP)
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Prevent any action during page transitions
+      if (segment !== 2) return
+
+      // If on the rating questions (not comment section)
+      if (currentRatingIndex < ratingQuestions.length) {
+        // Only handle if not typing in an input/textarea
+        if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+          return
+        }
+
+        // Number keys: 1-9 for values 1-9, 0 for 10
+        if (event.key >= '0' && event.key <= '9') {
+          let value = parseInt(event.key, 10)
+          if (value === 0) value = 10
+
+          const question = ratingQuestions[currentRatingIndex]
+          handleCategoryChange(question.key, value)
+          event.preventDefault()
+        }
+
+        // Enter key to go to next question
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          event.stopPropagation()
+
+          if (currentRatingIndex < ratingQuestions.length - 1) {
+            setCurrentRatingIndex(prev => prev + 1)
+          } else if (currentRatingIndex === ratingQuestions.length - 1) {
+            setCurrentRatingIndex(ratingQuestions.length)
+          }
+        }
+      } else if (currentRatingIndex === ratingQuestions.length) {
+        // On comment section - Enter submits the form (unless typing in textarea)
+        if (event.key === 'Enter' && !event.shiftKey && document.activeElement?.tagName !== 'TEXTAREA') {
+          event.preventDefault()
+          event.stopPropagation()
+          handleSubmit()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress)
+    }
+  }, [segment, currentRatingIndex, ratingQuestions])
+
+  // Smooth slider and card animation when changing questions (GSAP)
   useEffect(() => {
-    if (segment !== 2 || !sliderRef.current) return
+    if (segment !== 2 || !sliderRef.current || currentRatingIndex >= ratingQuestions.length) return
 
     const question = ratingQuestions[currentRatingIndex]
     const currentValue = categories[question.key]
     const sliderElement = sliderRef.current
+
+    // Animate the entire question card
+    if (questionCardRef.current) {
+      gsap.fromTo(
+        questionCardRef.current,
+        { scale: 0.98, opacity: 0.8 },
+        { scale: 1, opacity: 1, duration: 0.4, ease: 'power2.out' }
+      )
+    }
+
+    // Animate slider container with a bounce
+    if (sliderContainerRef.current) {
+      gsap.fromTo(
+        sliderContainerRef.current,
+        { y: 10, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.2)', delay: 0.2 }
+      )
+    }
 
     // Animate slider to new value with smooth easing
     gsap.to(
@@ -368,13 +562,14 @@ export const Rate: React.FC = () => {
         value: currentValue,
         duration: 0.8,
         ease: 'power2.inOut',
+        delay: 0.3,
         onUpdate: function () {
           sliderElement.value = this.targets()[0].value.toString()
           sliderElement.dispatchEvent(new Event('input', { bubbles: true }))
         },
       }
     )
-  }, [currentRatingIndex, segment])
+  }, [currentRatingIndex, segment, ratingQuestions]) // Removed 'categories' from dependencies
 
   const handlePlaceSelect = (place: PlaceResult) => {
     setSelectedPlace(place)
@@ -385,42 +580,7 @@ export const Rate: React.FC = () => {
     setCategories(prev => ({ ...prev, [key]: value }))
   }
 
-  // Keyboard shortcuts - Number keys and Enter
-  useEffect(() => {
-    if (segment !== 2 || currentRatingIndex >= ratingQuestions.length) return
 
-    const handleKeyPress = (event: KeyboardEvent) => {
-      // Only handle if not typing in an input/textarea
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        return
-      }
-
-      // Number keys: 1-9 for values 1-9, 0 for 10
-      if (event.key >= '0' && event.key <= '9') {
-        let value = parseInt(event.key, 10)
-        if (value === 0) value = 10
-
-        const question = ratingQuestions[currentRatingIndex]
-        handleCategoryChange(question.key, value)
-        event.preventDefault()
-      }
-
-      // Enter key to go to next question
-      if (event.key === 'Enter') {
-        if (currentRatingIndex < ratingQuestions.length - 1) {
-          setCurrentRatingIndex(currentRatingIndex + 1)
-        } else {
-          setCurrentRatingIndex(ratingQuestions.length)
-        }
-        event.preventDefault()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyPress)
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress)
-    }
-  }, [segment, currentRatingIndex, ratingQuestions])
 
   const calculateOverallScore = (): number => {
     const weights = {
@@ -445,6 +605,7 @@ export const Rate: React.FC = () => {
     setStatus(null)
 
     try {
+
 
       const ratingData = {
         userId: user.id,
@@ -478,25 +639,6 @@ export const Rate: React.FC = () => {
       setStatus({ type: 'success', message: 'Rating saved! Thanks for sharing.' })
       setSegment(3) // Show success
 
-      setTimeout(async () => {
-        // Reset form
-        setSegment(0)
-        setPlaces([])
-        setCategorizedPlaces({})
-        setSelectedCategory(null)
-        setSelectedPlace(null)
-        setCategories({
-          atmosphere: 5,
-          service: 5,
-          crowdSize: 5,
-          noiseLevel: 5,
-          socialEnergy: 5,
-        })
-        setCurrentRatingIndex(0)
-        setComment('')
-        setIsLoading(false)
-        setSegment(1)
-      }, 2000)
     } catch (error: any) {
       console.error('Submit error:', error)
       setStatus({
@@ -599,10 +741,10 @@ export const Rate: React.FC = () => {
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-lg">
                         <i className={`text-2xl text-white ${selectedCategory.includes('Restaurant')
-                            ? 'fas fa-utensils'
-                            : selectedCategory.includes('Cafe')
-                              ? 'fas fa-coffee'
-                              : 'fas fa-glass-cheers'
+                          ? 'fas fa-utensils'
+                          : selectedCategory.includes('Cafe')
+                            ? 'fas fa-coffee'
+                            : 'fas fa-glass-cheers'
                           }`} />
                       </div>
                       <div>
@@ -812,7 +954,7 @@ export const Rate: React.FC = () => {
                 const value = categories[question.key]
 
                 return (
-                  <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 mb-6">
+                  <div ref={questionCardRef} className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 mb-6">
                     {/* Question Text */}
                     <div className="w-full mb-8" style={{ overflow: 'hidden' }}>
                       <h3
@@ -824,7 +966,7 @@ export const Rate: React.FC = () => {
                     </div>
 
                     {/* Large Slider */}
-                    <div className="mb-8">
+                    <div ref={sliderContainerRef} className="mb-8">
                       <div className="flex items-center justify-center mb-6">
                         <div className="flex items-baseline justify-center gap-2">
                           <span className="text-2xl font-bold text-indigo-600 inline-block">
@@ -852,7 +994,6 @@ export const Rate: React.FC = () => {
                               WebkitAppearance: 'slider-horizontal',
                             } as React.CSSProperties}
                           />
-
                         </div>
                         <p className="text-xs text-slate-500 mt-3 text-center">Use number keys (1-0) or drag. Press Enter to continue.</p>
                       </div>
@@ -864,15 +1005,7 @@ export const Rate: React.FC = () => {
               {/* Navigation */}
               {currentRatingIndex < ratingQuestions.length && (
                 <div className="flex gap-4">
-                  {currentRatingIndex === 0 ? (
-                    <button
-                      onClick={() => setSegment(1)}
-                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"
-                    >
-                      <i className="fas fa-chevron-left" />
-                      Back to Places
-                    </button>
-                  ) : (
+                  {currentRatingIndex > 0 && (
                     <button
                       onClick={() => setCurrentRatingIndex(currentRatingIndex - 1)}
                       className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"
@@ -889,7 +1022,7 @@ export const Rate: React.FC = () => {
                         setCurrentRatingIndex(ratingQuestions.length)
                       }
                     }}
-                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition flex items-center justify-center gap-2"
+                    className={`${currentRatingIndex === 0 ? 'w-full' : 'flex-1'} py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition flex items-center justify-center gap-2`}
                   >
                     {currentRatingIndex === ratingQuestions.length - 1 ? (
                       <>
@@ -908,18 +1041,25 @@ export const Rate: React.FC = () => {
 
               {/* Comment Section */}
               {currentRatingIndex >= ratingQuestions.length && (
-                <div className="space-y-6">
+                <div ref={commentSectionRef} className="space-y-6">
                   <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 text-center">
                     <div className="mb-4">
-                      <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 bg-clip-text text-transparent mb-2">
+                      <div
+                        ref={overallScoreRef}
+                        className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 bg-clip-text text-transparent mb-2"
+                      >
                         {calculateOverallScore()}
                       </div>
-                      <p className="text-slate-600">Your Overall Rating</p>
+                      <p ref={scoreTextRef} className="text-slate-600">
+                        Your Overall Rating
+                      </p>
                     </div>
-                    <p className="text-sm text-slate-500">You've completed all ratings!</p>
+                    <p ref={completedTextRef} className="text-sm text-slate-500">
+                      You've completed all ratings!
+                    </p>
                   </div>
 
-                  <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
+                  <div ref={commentBoxRef} className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
                     <label className="text-sm font-semibold text-slate-700 mb-3 block">
                       Add a comment (optional)
                     </label>
@@ -933,10 +1073,11 @@ export const Rate: React.FC = () => {
                   </div>
 
                   {/* Final Actions */}
-                  <div className="flex gap-4">
+                  <div ref={buttonsRef} className="flex gap-4">
                     <button
                       onClick={() => setCurrentRatingIndex(ratingQuestions.length - 1)}
                       className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"
+                      disabled={isSubmitting}
                     >
                       <i className="fas fa-chevron-left" />
                       Edit Ratings
@@ -961,7 +1102,6 @@ export const Rate: React.FC = () => {
                   </div>
                 </div>
               )}
-
               {status && (
                 <div
                   className={`px-4 py-3 rounded-xl text-sm font-semibold ${status.type === 'error'
@@ -978,12 +1118,21 @@ export const Rate: React.FC = () => {
           {/* Segment 3: Success */}
           {segment === 3 && (
             <div ref={segmentRef} className="text-center py-12">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center mx-auto mb-6">
-                <i className="fas fa-check text-white text-3xl" />
+              <div
+                ref={successIconRef}
+                className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center mx-auto mb-6"
+              >
+                <i ref={successCheckRef} className="fas fa-check text-white text-3xl" />
               </div>
-              <h3 className="text-3xl font-bold text-slate-900 mb-2">Rating Saved!</h3>
-              <p className="text-slate-600 mb-6">Your feedback helps the whole crew find better spots.</p>
-              <p className="text-sm text-slate-500">Redirecting to dashboard...</p>
+              <h3 ref={successTitleRef} className="text-3xl font-bold text-slate-900 mb-2">
+                Rating Saved!
+              </h3>
+              <p ref={successDescRef} className="text-slate-600 mb-6">
+                Your feedback helps the whole crew find better spots.
+              </p>
+              <p ref={successRedirectRef} className="text-sm text-slate-500">
+                Redirecting to dashboard...
+              </p>
             </div>
           )}
         </div>
