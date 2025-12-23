@@ -528,6 +528,16 @@ async function handleVerify(interaction: any, code: string) {
       verificationCode: code,
     })
 
+    try {
+      await api.client.post('/api/auth/discord/verify-complete', {
+        discordId: interaction.user.id,
+        verificationCode: code,
+      })
+      console.log(`[Verify] Verification completion notification sent`)
+    } catch (notifyError) {
+      console.error(`[Verify] Failed to send completion notification:`, notifyError)
+    }
+
     console.log(`[Verify] Backend response received:`, response.data)
 
     if (!response.data || !response.data.token) {

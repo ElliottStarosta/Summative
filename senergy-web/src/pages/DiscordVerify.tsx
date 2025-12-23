@@ -2,10 +2,14 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import gsap from 'gsap'
 import Snowfall from 'react-snowfall'
+import axios from 'axios'
+import { useAuth } from '@/context/AuthContext'
 
 export const DiscordVerify: React.FC = () => {
+
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const codeBoxRef = useRef<HTMLDivElement>(null)
@@ -19,6 +23,9 @@ export const DiscordVerify: React.FC = () => {
   const [verificationCode, setVerificationCode] = useState<string>('')
   const [copied, setCopied] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState(24 * 60 * 60)
+
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
 
   useEffect(() => {
     const code = location.state?.verificationCode
@@ -148,110 +155,110 @@ export const DiscordVerify: React.FC = () => {
     }
   }, [verificationCode])
 
-// Smooth color transition animation when copied state changes
-useEffect(() => {
-  if (!codeBoxRef.current) return
+  // Smooth color transition animation when copied state changes
+  useEffect(() => {
+    if (!codeBoxRef.current) return
 
-  const digits = codeBoxRef.current.querySelectorAll('[data-digit]')
-  const copyBtn = copyBtnRef.current
-  const discordIcon = discordIconRef.current
+    const digits = codeBoxRef.current.querySelectorAll('[data-digit]')
+    const copyBtn = copyBtnRef.current
+    const discordIcon = discordIconRef.current
 
-  if (copied) {
-    // Store original backgrounds before animating
-    digits.forEach((digit, index) => {
-      const originalBg = window.getComputedStyle(digit as HTMLElement).background
-      ;(digit as HTMLElement).dataset.originalBg = originalBg
+    if (copied) {
+      // Store original backgrounds before animating
+      digits.forEach((digit, index) => {
+        const originalBg = window.getComputedStyle(digit as HTMLElement).background
+          ; (digit as HTMLElement).dataset.originalBg = originalBg
 
-      gsap.to(digit, {
-        background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
-        scale: 1.1,
-        duration: 0.4,
-        delay: index * 0.03,
-        ease: 'back.out(2)',
-        onComplete: () => {
-          gsap.to(digit, {
-            scale: 1,
-            duration: 0.3,
-            ease: 'elastic.out(1, 0.5)'
-          })
-        }
-      })
-    })
-
-    // Animate Discord icon to green
-    if (discordIcon) {
-      const originalIconBg = window.getComputedStyle(discordIcon).background
-      discordIcon.dataset.originalBg = originalIconBg
-
-      gsap.to(discordIcon, {
-        background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
-        boxShadow: '0 25px 50px -12px rgba(22, 163, 74, 0.5)',
-        scale: 1.1,
-        duration: 0.5,
-        ease: 'back.out(2)',
-        onComplete: () => {
-          gsap.to(discordIcon, {
-            scale: 1,
-            duration: 0.4,
-            ease: 'elastic.out(1, 0.5)'
-          })
-        }
-      })
-    }
-
-    // Store and animate button
-    if (copyBtn) {
-      const originalBtnBg = window.getComputedStyle(copyBtn).background
-      copyBtn.dataset.originalBg = originalBtnBg
-
-      gsap.to(copyBtn, {
-        background: 'linear-gradient(to right, rgb(22, 163, 74), rgb(21, 128, 61))',
-        scale: 0.98,
-        duration: 0.15,
-        ease: 'power2.out',
-        onComplete: () => {
-          gsap.to(copyBtn, {
-            scale: 1,
-            duration: 0.4,
-            ease: 'elastic.out(1, 0.4)'
-          })
-        }
-      })
-    }
-  } else {
-    // Restore original backgrounds with smooth, slower transition
-    digits.forEach((digit, index) => {
-      const originalBg = (digit as HTMLElement).dataset.originalBg
-      if (originalBg) {
         gsap.to(digit, {
-          background: originalBg,
-          duration: 0.8,
-          delay: index * 0.05,
-          ease: 'power2.inOut'
+          background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
+          scale: 1.1,
+          duration: 0.4,
+          delay: index * 0.03,
+          ease: 'back.out(2)',
+          onComplete: () => {
+            gsap.to(digit, {
+              scale: 1,
+              duration: 0.3,
+              ease: 'elastic.out(1, 0.5)'
+            })
+          }
+        })
+      })
+
+      // Animate Discord icon to green
+      if (discordIcon) {
+        const originalIconBg = window.getComputedStyle(discordIcon).background
+        discordIcon.dataset.originalBg = originalIconBg
+
+        gsap.to(discordIcon, {
+          background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
+          boxShadow: '0 25px 50px -12px rgba(22, 163, 74, 0.5)',
+          scale: 1.1,
+          duration: 0.5,
+          ease: 'back.out(2)',
+          onComplete: () => {
+            gsap.to(discordIcon, {
+              scale: 1,
+              duration: 0.4,
+              ease: 'elastic.out(1, 0.5)'
+            })
+          }
         })
       }
-    })
 
-    // Restore Discord icon
-    if (discordIcon && discordIcon.dataset.originalBg) {
-      gsap.to(discordIcon, {
-        background: discordIcon.dataset.originalBg,
-        boxShadow: '0 25px 50px -12px rgba(88, 101, 242, 0.5)',
-        duration: 0.8,
-        ease: 'power3.inOut'
-      })
-    }
+      // Store and animate button
+      if (copyBtn) {
+        const originalBtnBg = window.getComputedStyle(copyBtn).background
+        copyBtn.dataset.originalBg = originalBtnBg
 
-    // Restore button original background
-    if (copyBtn && copyBtn.dataset.originalBg) {
-      gsap.to(copyBtn, {
-        background: copyBtn.dataset.originalBg,
-        duration: 0.8,
-        ease: 'power3.inOut'
+        gsap.to(copyBtn, {
+          background: 'linear-gradient(to right, rgb(22, 163, 74), rgb(21, 128, 61))',
+          scale: 0.98,
+          duration: 0.15,
+          ease: 'power2.out',
+          onComplete: () => {
+            gsap.to(copyBtn, {
+              scale: 1,
+              duration: 0.4,
+              ease: 'elastic.out(1, 0.4)'
+            })
+          }
+        })
+      }
+    } else {
+      // Restore original backgrounds with smooth, slower transition
+      digits.forEach((digit, index) => {
+        const originalBg = (digit as HTMLElement).dataset.originalBg
+        if (originalBg) {
+          gsap.to(digit, {
+            background: originalBg,
+            duration: 0.8,
+            delay: index * 0.05,
+            ease: 'power2.inOut'
+          })
+        }
       })
+
+      // Restore Discord icon
+      if (discordIcon && discordIcon.dataset.originalBg) {
+        gsap.to(discordIcon, {
+          background: discordIcon.dataset.originalBg,
+          boxShadow: '0 25px 50px -12px rgba(88, 101, 242, 0.5)',
+          duration: 0.8,
+          ease: 'power3.inOut'
+        })
+      }
+
+      // Restore button original background
+      if (copyBtn && copyBtn.dataset.originalBg) {
+        gsap.to(copyBtn, {
+          background: copyBtn.dataset.originalBg,
+          duration: 0.8,
+          ease: 'power3.inOut'
+        })
+      }
     }
-  }
-}, [copied])
+  }, [copied])
 
 
 
@@ -330,6 +337,53 @@ useEffect(() => {
     }
   }, [])
 
+  // Poll for verification status
+  useEffect(() => {
+    if (!user?.id || !verificationCode) return
+
+    let pollInterval: NodeJS.Timeout
+    let pollCount = 0
+    const MAX_POLLS = 60 // Poll for 2 minutes
+
+    const checkVerificationStatus = async () => {
+      try {
+        console.log('[DiscordVerify] Checking verification status...')
+
+        const response = await axios.get(`/api/auth/discord/status/${user.id}`)
+
+        console.log('[DiscordVerify] Status:', response.data)
+
+        if (response.data.verified) {
+          console.log('[DiscordVerify] ✅ Verification complete! Redirecting...')
+          setIsVerifying(true)
+
+          if (pollInterval) clearInterval(pollInterval)
+
+          await new Promise(resolve => setTimeout(resolve, 1500))
+
+          navigate('/dashboard', { replace: true })
+        } else {
+          pollCount++
+          console.log(`[DiscordVerify] Not verified yet (${pollCount}/${MAX_POLLS})`)
+
+          if (pollCount >= MAX_POLLS) {
+            clearInterval(pollInterval)
+            setVerificationError('Verification timeout. Please try again.')
+          }
+        }
+      } catch (error: any) {
+        console.error('[DiscordVerify] Status check error:', error)
+      }
+    }
+
+    pollInterval = setInterval(checkVerificationStatus, 2000)
+    checkVerificationStatus()
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval)
+    }
+  }, [user?.id, verificationCode, navigate])
+
   if (!verificationCode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50">
@@ -357,7 +411,7 @@ useEffect(() => {
             <div
               ref={discordIconRef}
               className="relative w-24 h-24 rounded-full bg-gradient-to-br from-[#5865F2] to-[#4752C4] flex items-center justify-center shadow-2xl shadow-[#5865F2]/50"
-              >
+            >
               <i className="fab fa-discord text-white text-5xl" />
             </div>
           </div>
@@ -472,7 +526,7 @@ useEffect(() => {
                   <p className="font-bold text-slate-900">Send the command</p>
                   <p className="text-sm text-slate-600 mb-2">Type this command in your DM:</p>
                   <code className="px-3 py-2 bg-gradient-to-br from-blue-600 to-blue-900 text-white rounded-lg text-sm font-mono inline-block transition-all duration-300">
-                  /verify {verificationCode}
+                    /verify {verificationCode}
                   </code>
                 </div>
               </div>
@@ -517,6 +571,30 @@ useEffect(() => {
           </div>
         </div>
       </div>
+
+      {/* Verification in progress overlay */}
+      {isVerifying && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl text-center max-w-md">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <i className="fas fa-check text-white text-3xl" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Verified!</h2>
+            <p className="text-slate-600 mb-4">Taking you to your dashboard...</p>
+            <i className="fas fa-spinner fa-spin text-2xl text-indigo-600" />
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {verificationError && (
+        <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
+          <p className="text-red-700 text-sm font-medium">
+            <i className="fas fa-exclamation-circle mr-2" />
+            {verificationError}
+          </p>
+        </div>
+      )}
     </div>
   )
 }                       

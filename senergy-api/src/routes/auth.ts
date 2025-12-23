@@ -292,4 +292,100 @@ router.get('/verify', authMiddleware, async (req: Request, res: Response) => {
   }
 })
 
+/**
+ * GET /api/auth/discord/status/:userId
+ * Check if a user's Discord has been verified
+ */
+router.get('/discord/status/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params
+
+    const userDoc = await db.collection('users').doc(userId).get()
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ 
+        success: false,
+        verified: false,
+        error: 'User not found' 
+      })
+    }
+
+    const userData = userDoc.data()
+
+    res.json({
+      success: true,
+      verified: userData?.discordVerified || false,
+      discordId: userData?.discordId || null,
+    })
+  } catch (error: any) {
+    console.error('[Auth] Check Discord status error:', error)
+    res.status(500).json({ 
+      success: false,
+      verified: false,
+      error: error.message 
+    })
+  }
+})
+
+/**
+ * POST /api/auth/discord/verify-complete
+ * Webhook for Discord bot to notify verification completion
+ */
+router.post('/discord/verify-complete', async (req: Request, res: Response) => {
+  try {
+    const { discordId, verificationCode } = req.body
+
+    console.log('[Auth] Discord verify-complete webhook:', { discordId, verificationCode })
+
+    if (!discordId || !verificationCode) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Discord ID and verification code required' 
+      })
+    }
+
+    const codeDoc = await db.collection('verificationCodes').doc(verificationCode).get()
+    
+    if (!codeDoc.exists) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Invalid verification code' 
+      })
+    }
+
+    const codeData = codeDoc.data()
+    const userId = codeData?.userId
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid code data' 
+      })
+    }
+
+    await db.collection('users').doc(userId).update({
+      discordVerified: true,
+      discordId: discordId,
+    })
+
+    await db.collection('verificationCodes').doc(verificationCode).delete()
+
+    console.log('[Auth] Discord verification completed for user:', userId)
+
+    res.json({
+      success: true,
+      userId,
+      message: 'Discord verification completed'
+    })
+  } catch (error: any) {
+    console.error('[Auth] Discord verify-complete error:', error)
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    })
+  }
+})
+
+
+
 export default router

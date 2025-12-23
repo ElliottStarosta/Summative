@@ -62,9 +62,9 @@ export const DiscordBotDocs: React.FC = () => {
   // Animate content change with stagger
   useEffect(() => {
     if (!contentRef.current) return
-    
+
     const tl = gsap.timeline()
-    
+
     tl.fromTo(
       contentRef.current,
       { opacity: 0, y: 30, scale: 0.98 },
@@ -182,10 +182,16 @@ export const DiscordBotDocs: React.FC = () => {
                     <p className="text-slate-600 mb-3">
                       Invite the Senergy bot to your Discord server using the invite link. The bot needs permission to read messages and send responses.
                     </p>
-                    <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold hover:shadow-lg hover:scale-105 transition-all duration-300">
+                    <a
+                      href="https://discord.com/oauth2/authorize?client_id=1451012603714207744&permissions=8&integration_type=0&scope=bot"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 text-white font-semibold hover:shadow-lg hover:scale-105 transition-all duration-300"
+                      >
                       <i className="fab fa-discord mr-2" />
                       Invite Bot
-                    </button>
+                    </a>
+
                   </div>
                 </div>
 
@@ -370,7 +376,7 @@ export const DiscordBotDocs: React.FC = () => {
                 </div>
                 Rate Command
               </h2>
-              
+
               <div data-animate-item className="group relative overflow-hidden p-6 rounded-xl border-2 border-slate-200 hover:border-orange-400 transition-all duration-300 mb-6 hover:shadow-xl hover:scale-[1.02]">
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-50 to-red-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10">
@@ -562,7 +568,7 @@ export const DiscordBotDocs: React.FC = () => {
                 </div>
                 Find Your Squad
               </h2>
-              
+
               <div data-animate-item className="group relative overflow-hidden p-6 rounded-xl border-2 border-slate-200 hover:border-pink-400 transition-all duration-300 mb-6 hover:shadow-xl hover:scale-[1.02]">
                 <div className="absolute inset-0 bg-gradient-to-br from-pink-50 to-rose-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10">
@@ -627,8 +633,8 @@ export const DiscordBotDocs: React.FC = () => {
       <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
-              <i className="fab fa-discord text-white text-lg" />
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#5865F2] to-[#4752C4] flex items-center justify-center shadow-lg shadow-[#5865F2]/40">
+          <i className="fab fa-discord text-white text-lg" />
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Discord Bot</p>
@@ -656,17 +662,15 @@ export const DiscordBotDocs: React.FC = () => {
                   key={section.id}
                   data-section-btn={section.id}
                   onClick={() => handleSectionChange(section.id)}
-                  className={`w-full text-left px-4 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center gap-3 group ${
-                    activeSection === section.id
+                  className={`w-full text-left px-4 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center gap-3 group ${activeSection === section.id
                       ? `bg-gradient-to-r ${section.color} text-white shadow-lg scale-105`
                       : `${section.bgColor} text-slate-700 hover:scale-105`
-                  }`}
+                    }`}
                 >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
-                    activeSection === section.id
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${activeSection === section.id
                       ? 'bg-white/20'
                       : 'bg-white border border-slate-200 group-hover:border-slate-300'
-                  }`}>
+                    }`}>
                     <i className={`fas ${section.icon} ${activeSection === section.id ? 'text-white' : section.textColor}`} />
                   </div>
                   <span className="flex-1">{section.title}</span>
