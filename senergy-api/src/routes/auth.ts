@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { authService } from '@/services/auth.service'
 import { authMiddleware } from '@/middleware/auth'
-import { db } from '@/config/firebase'
+import admin, { db } from '@/config/firebase'
 
 const router = Router()
 
@@ -102,11 +102,28 @@ router.post('/google', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Token required' })
     }
 
-    console.log('[Auth] Received Google token via POST (length:', token.length, ')')
-    const result = await authService.handleGoogleAuth(token)
+    console.log('[Auth] Received token via POST (length:', token.length, ')')
     
-    console.log('[Auth] Google auth successful, returning user:', result.user.displayName)
-    res.json(result)
+    // Check if it's a Firebase token (starts with "ey" for JWT) or auth code
+    if (token.startsWith('ey') && token.includes('.')) {
+      // It's a Firebase ID token - verify with Firebase
+      console.log('[Auth] Detected Firebase ID token')
+      const decodedToken = await admin.auth().verifyIdToken(token)
+      console.log('[Auth] Firebase token verified for user:', decodedToken.email)
+      
+      // Get or create user from Firebase
+      const result = await authService.handleGoogleAuth(token)
+      
+      console.log('[Auth] Firebase auth successful, returning user:', result.user.displayName)
+      res.json(result)
+    } else {
+      // It's an authorization code - use existing flow
+      console.log('[Auth] Detected authorization code')
+      const result = await authService.handleGoogleAuth(token)
+      
+      console.log('[Auth] Google auth successful, returning user:', result.user.displayName)
+      res.json(result)
+    }
   } catch (error: any) {
     console.error('[Auth] Google auth error:', error)
     console.error('[Auth] Error stack:', error.stack)
@@ -227,6 +244,7 @@ router.post('/discord/link', authMiddleware, async (req: Request, res: Response)
     res.status(400).json({ error: error.message || 'Failed to link Discord ID' })
   }
 })
+
 
 // Generate verification code for Discord linking
 router.post('/discord/verify-code', authMiddleware, async (req: Request, res: Response) => {

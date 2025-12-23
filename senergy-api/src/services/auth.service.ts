@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import jwt, { SignOptions } from 'jsonwebtoken'
-import { db, auth } from '@/config/firebase'
+import admin, { db, auth } from '@/config/firebase'
 import { User } from '@/types'
 
 interface CreateUserData {
@@ -307,6 +307,70 @@ export class AuthService {
     }
   }
 
+  async handleFirebaseAuth(decodedToken: any) {
+  try {
+    const { uid, email, name: displayName, picture: photoURL } = decodedToken
+    
+    if (!email) {
+      throw new Error('No email found in Firebase token')
+    }
+
+    // Check if user exists
+    let userSnapshot = await db.collection('users').where('email', '==', email).limit(1).get()
+    
+    let userId: string
+    let userData: any
+
+    if (!userSnapshot.empty) {
+      // Existing user
+      const userDoc = userSnapshot.docs[0]
+      userId = userDoc.id
+      userData = userDoc.data()
+      
+      console.log('[Auth] Existing user found:', userData.displayName)
+    } else {
+      // New user
+      console.log('[Auth] Creating new user from Firebase auth')
+      const userRef = db.collection('users').doc()
+      userId = userRef.id
+      
+      userData = {
+        uid: uid,
+        email: email,
+        displayName: displayName || email.split('@')[0],
+        photoURL: photoURL || null,
+        provider: 'google',
+        createdAt: admin.database.ServerValue.TIMESTAMP,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      }
+      
+      await userRef.set(userData)
+      console.log('[Auth] New user created:', userData.displayName)
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: userId, email: email },
+      process.env.JWT_SECRET!,
+      { expiresIn: '7d' }
+    )
+
+    return {
+      token,
+      user: {
+        id: userId,
+        email: userData.email,
+        displayName: userData.displayName,
+        photoURL: userData.photoURL,
+        provider: userData.provider,
+      }
+    }
+  } catch (error: any) {
+    console.error('[Auth] Firebase auth error:', error)
+    throw error
+  }
+}
+
   async handleDiscordAuth(discordId: string, verificationCode?: string): Promise<{ user: User; token: string }> {
     try {
       // Find user by Discord ID
@@ -351,6 +415,7 @@ export class AuthService {
 
         // Delete used verification code
         await db.collection('verificationCodes').doc(verificationCode).delete()
+        console.log("DELETED VERFICATIOn CODE!!")
       } else {
         // No code provided - check if already verified
         if (!userData.discordVerified) {

@@ -6,7 +6,7 @@ import Snowfall from 'react-snowfall'
 export const DiscordVerify: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  
+
   const containerRef = useRef<HTMLDivElement>(null)
   const codeBoxRef = useRef<HTMLDivElement>(null)
   const discordIconRef = useRef<HTMLDivElement>(null)
@@ -14,16 +14,15 @@ export const DiscordVerify: React.FC = () => {
   const pulseRingRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const subtitleRef = useRef<HTMLParagraphElement>(null)
-  
+  const copyBtnRef = useRef<HTMLButtonElement>(null)
+
   const [verificationCode, setVerificationCode] = useState<string>('')
   const [copied, setCopied] = useState(false)
-  const [timeRemaining, setTimeRemaining] = useState(24 * 60 * 60) // 24 hours in seconds
+  const [timeRemaining, setTimeRemaining] = useState(24 * 60 * 60)
 
   useEffect(() => {
-    // Get verification code from location state
     const code = location.state?.verificationCode
     if (!code) {
-      // If no code, redirect back to quiz
       navigate('/quiz')
       return
     }
@@ -45,7 +44,6 @@ export const DiscordVerify: React.FC = () => {
     return () => clearInterval(interval)
   }, [])
 
-  // Format time remaining
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
@@ -58,25 +56,22 @@ export const DiscordVerify: React.FC = () => {
 
     const tl = gsap.timeline()
 
-    // Fade in container
     tl.fromTo(
       containerRef.current,
       { opacity: 0 },
       { opacity: 1, duration: 0.5, ease: 'power2.out' }
     )
 
-    // Animate discord icon with bounce
     if (discordIconRef.current) {
       tl.fromTo(
         discordIconRef.current,
         { scale: 0, rotation: -180 },
-        { 
-          scale: 1, 
-          rotation: 0, 
-          duration: 1, 
+        {
+          scale: 1,
+          rotation: 0,
+          duration: 1,
           ease: 'elastic.out(1, 0.5)',
           onComplete: () => {
-            // Start floating animation
             gsap.to(discordIconRef.current, {
               y: -12,
               duration: 2.5,
@@ -90,7 +85,6 @@ export const DiscordVerify: React.FC = () => {
       )
     }
 
-    // Pulse ring animation
     if (pulseRingRef.current) {
       tl.fromTo(
         pulseRingRef.current,
@@ -99,7 +93,6 @@ export const DiscordVerify: React.FC = () => {
         0.3
       )
 
-      // Continuous pulse
       gsap.to(pulseRingRef.current, {
         scale: 1.2,
         opacity: 0,
@@ -109,7 +102,6 @@ export const DiscordVerify: React.FC = () => {
       })
     }
 
-    // Animate code box with stagger effect
     if (codeBoxRef.current) {
       tl.fromTo(
         codeBoxRef.current,
@@ -118,7 +110,6 @@ export const DiscordVerify: React.FC = () => {
         0.5
       )
 
-      // Animate individual digits
       const digits = codeBoxRef.current.querySelectorAll('[data-digit]')
       tl.fromTo(
         digits,
@@ -128,7 +119,6 @@ export const DiscordVerify: React.FC = () => {
       )
     }
 
-    // Animate title
     if (titleRef.current) {
       tl.fromTo(
         titleRef.current,
@@ -138,7 +128,6 @@ export const DiscordVerify: React.FC = () => {
       )
     }
 
-    // Animate subtitle
     if (subtitleRef.current) {
       tl.fromTo(
         subtitleRef.current,
@@ -148,7 +137,6 @@ export const DiscordVerify: React.FC = () => {
       )
     }
 
-    // Animate steps
     if (stepsRef.current) {
       const steps = stepsRef.current.querySelectorAll('[data-step]')
       tl.fromTo(
@@ -160,24 +148,138 @@ export const DiscordVerify: React.FC = () => {
     }
   }, [verificationCode])
 
+// Smooth color transition animation when copied state changes
+useEffect(() => {
+  if (!codeBoxRef.current) return
+
+  const digits = codeBoxRef.current.querySelectorAll('[data-digit]')
+  const copyBtn = copyBtnRef.current
+  const discordIcon = discordIconRef.current
+
+  if (copied) {
+    // Store original backgrounds before animating
+    digits.forEach((digit, index) => {
+      const originalBg = window.getComputedStyle(digit as HTMLElement).background
+      ;(digit as HTMLElement).dataset.originalBg = originalBg
+
+      gsap.to(digit, {
+        background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
+        scale: 1.1,
+        duration: 0.4,
+        delay: index * 0.03,
+        ease: 'back.out(2)',
+        onComplete: () => {
+          gsap.to(digit, {
+            scale: 1,
+            duration: 0.3,
+            ease: 'elastic.out(1, 0.5)'
+          })
+        }
+      })
+    })
+
+    // Animate Discord icon to green
+    if (discordIcon) {
+      const originalIconBg = window.getComputedStyle(discordIcon).background
+      discordIcon.dataset.originalBg = originalIconBg
+
+      gsap.to(discordIcon, {
+        background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
+        boxShadow: '0 25px 50px -12px rgba(22, 163, 74, 0.5)',
+        scale: 1.1,
+        duration: 0.5,
+        ease: 'back.out(2)',
+        onComplete: () => {
+          gsap.to(discordIcon, {
+            scale: 1,
+            duration: 0.4,
+            ease: 'elastic.out(1, 0.5)'
+          })
+        }
+      })
+    }
+
+    // Store and animate button
+    if (copyBtn) {
+      const originalBtnBg = window.getComputedStyle(copyBtn).background
+      copyBtn.dataset.originalBg = originalBtnBg
+
+      gsap.to(copyBtn, {
+        background: 'linear-gradient(to right, rgb(22, 163, 74), rgb(21, 128, 61))',
+        scale: 0.98,
+        duration: 0.15,
+        ease: 'power2.out',
+        onComplete: () => {
+          gsap.to(copyBtn, {
+            scale: 1,
+            duration: 0.4,
+            ease: 'elastic.out(1, 0.4)'
+          })
+        }
+      })
+    }
+  } else {
+    // Restore original backgrounds with smooth, slower transition
+    digits.forEach((digit, index) => {
+      const originalBg = (digit as HTMLElement).dataset.originalBg
+      if (originalBg) {
+        gsap.to(digit, {
+          background: originalBg,
+          duration: 0.8,
+          delay: index * 0.05,
+          ease: 'power2.inOut'
+        })
+      }
+    })
+
+    // Restore Discord icon
+    if (discordIcon && discordIcon.dataset.originalBg) {
+      gsap.to(discordIcon, {
+        background: discordIcon.dataset.originalBg,
+        boxShadow: '0 25px 50px -12px rgba(88, 101, 242, 0.5)',
+        duration: 0.8,
+        ease: 'power3.inOut'
+      })
+    }
+
+    // Restore button original background
+    if (copyBtn && copyBtn.dataset.originalBg) {
+      gsap.to(copyBtn, {
+        background: copyBtn.dataset.originalBg,
+        duration: 0.8,
+        ease: 'power3.inOut'
+      })
+    }
+  }
+}, [copied])
+
+
+
+
   const handleCopy = () => {
     if (!verificationCode) return
-    
+
     navigator.clipboard.writeText(verificationCode)
     setCopied(true)
 
-    // Animate copy button
-    if (codeBoxRef.current) {
-      const copyBtn = codeBoxRef.current.querySelector('[data-copy-btn]')
-      if (copyBtn) {
-        gsap.timeline()
-          .to(copyBtn, { scale: 0.9, duration: 0.1 })
-          .to(copyBtn, { scale: 1.1, duration: 0.2, ease: 'back.out(3)' })
-          .to(copyBtn, { scale: 1, duration: 0.1 })
-      }
-
-      // Color change is handled by the 'copied' state and CSS transition
-      // No additional animation needed - the transition class handles it
+    // Button click animation
+    if (copyBtnRef.current) {
+      gsap.timeline()
+        .to(copyBtnRef.current, {
+          scale: 0.92,
+          duration: 0.1,
+          ease: 'power2.in'
+        })
+        .to(copyBtnRef.current, {
+          scale: 1.05,
+          duration: 0.2,
+          ease: 'back.out(3)'
+        })
+        .to(copyBtnRef.current, {
+          scale: 1,
+          duration: 0.15,
+          ease: 'power2.out'
+        })
     }
 
     setTimeout(() => setCopied(false), 2000)
@@ -186,6 +288,47 @@ export const DiscordVerify: React.FC = () => {
   const handleSkip = () => {
     navigate('/dashboard')
   }
+
+  // Add hover animation for copy button
+  useEffect(() => {
+    if (!copyBtnRef.current) return
+
+    const btn = copyBtnRef.current
+    let hoverAnimation: gsap.core.Tween
+
+    const handleMouseEnter = () => {
+      // Kill any existing animation first
+      if (hoverAnimation) hoverAnimation.kill()
+
+      hoverAnimation = gsap.to(btn, {
+        scale: 1.03,
+        boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.4), 0 8px 10px -6px rgba(59, 130, 246, 0.3)',
+        duration: 0.2,
+        ease: 'power2.out'
+      })
+    }
+
+    const handleMouseLeave = () => {
+      // Kill any existing animation first
+      if (hoverAnimation) hoverAnimation.kill()
+
+      hoverAnimation = gsap.to(btn, {
+        scale: 1,
+        boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3), 0 4px 6px -4px rgba(59, 130, 246, 0.2)',
+        duration: 0.2,
+        ease: 'power2.out'
+      })
+    }
+
+    btn.addEventListener('mouseenter', handleMouseEnter)
+    btn.addEventListener('mouseleave', handleMouseLeave)
+
+    return () => {
+      btn.removeEventListener('mouseenter', handleMouseEnter)
+      btn.removeEventListener('mouseleave', handleMouseLeave)
+      if (hoverAnimation) hoverAnimation.kill()
+    }
+  }, [])
 
   if (!verificationCode) {
     return (
@@ -213,8 +356,8 @@ export const DiscordVerify: React.FC = () => {
             <div ref={pulseRingRef} className="absolute w-32 h-32 rounded-full bg-primary-400/30 blur-xl" />
             <div
               ref={discordIconRef}
-              className="relative w-24 h-24 rounded-full bg-gradient-to-br from-primary-600 via-purple-600 to-accent-500 flex items-center justify-center shadow-2xl shadow-primary-500/50"
-            >
+              className="relative w-24 h-24 rounded-full bg-gradient-to-br from-[#5865F2] to-[#4752C4] flex items-center justify-center shadow-2xl shadow-[#5865F2]/50"
+              >
               <i className="fab fa-discord text-white text-5xl" />
             </div>
           </div>
@@ -242,18 +385,18 @@ export const DiscordVerify: React.FC = () => {
                 <p className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">
                   Your Verification Code
                 </p>
-                
+
                 {/* Code Display - Individual Digits */}
                 <div className="flex justify-center gap-3 mb-6">
                   {verificationCode.split('').map((digit, idx) => (
                     <div
                       key={idx}
                       data-digit
-                      className={`w-14 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/30 transform hover:scale-110 transition-all duration-300 ${
-                        copied 
-                          ? 'bg-gradient-to-br from-primary-700 to-blue-600' 
-                          : 'bg-gradient-to-br from-primary-500 to-primary-600'
-                      }`}
+                      className="w-14 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/30 transform"
+                      style={{
+                        background: 'linear-gradient(to bottom right, rgb(59, 130, 246), rgb(37, 99, 235))',
+                        transition: 'all 0.3s ease', // CSS fallback
+                      }}
                     >
                       <span className="text-3xl font-black text-white tracking-wider">
                         {digit}
@@ -264,9 +407,12 @@ export const DiscordVerify: React.FC = () => {
 
                 {/* Copy Button */}
                 <button
-                  data-copy-btn
+                  ref={copyBtnRef}
                   onClick={handleCopy}
-                  className="w-full px-6 py-4 bg-gradient-to-r from-primary-600 to-accent-500 hover:from-primary-700 hover:to-accent-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-primary-500/30 hover:shadow-xl hover:shadow-primary-500/40 transition-all duration-300 flex items-center justify-center gap-3 group"
+                  className="w-full px-6 py-4 bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-primary-500/30 flex items-center justify-center gap-3 group"
+                  style={{
+                    transition: 'all 0.3s ease', // Add CSS transition as fallback
+                  }}
                 >
                   {copied ? (
                     <>
@@ -275,7 +421,7 @@ export const DiscordVerify: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <i className="fas fa-copy text-xl group-hover:scale-110 transition-transform" />
+                      <i className="fas fa-copy text-xl transition-transform duration-300 group-hover:scale-110" />
                       <span>Copy Code</span>
                     </>
                   )}
@@ -306,7 +452,7 @@ export const DiscordVerify: React.FC = () => {
                 data-step
                 className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-100"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0 shadow-lg">
                   <span className="text-white font-bold">1</span>
                 </div>
                 <div>
@@ -319,14 +465,14 @@ export const DiscordVerify: React.FC = () => {
                 data-step
                 className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0 shadow-lg">
                   <span className="text-white font-bold">2</span>
                 </div>
                 <div>
                   <p className="font-bold text-slate-900">Send the command</p>
                   <p className="text-sm text-slate-600 mb-2">Type this command in your DM:</p>
-                  <code className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm font-mono inline-block">
-                    /verify {verificationCode}
+                  <code className="px-3 py-2 bg-gradient-to-br from-blue-600 to-blue-900 text-white rounded-lg text-sm font-mono inline-block transition-all duration-300">
+                  /verify {verificationCode}
                   </code>
                 </div>
               </div>
@@ -335,7 +481,7 @@ export const DiscordVerify: React.FC = () => {
                 data-step
                 className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-r from-pink-50 via-purple-50 to-indigo-50 border border-pink-100"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-600 via-purple-600 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0 shadow-lg">
                   <span className="text-white font-bold">3</span>
                 </div>
                 <div>
@@ -373,4 +519,4 @@ export const DiscordVerify: React.FC = () => {
       </div>
     </div>
   )
-}
+}                       

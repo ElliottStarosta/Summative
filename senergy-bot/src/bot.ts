@@ -372,17 +372,25 @@ client.on('interactionCreate', async interaction => {
         .setTitle('❌ Oops!')
         .setDescription('Something went wrong. Please try again.')
       
-      await interaction.reply({ embeds: [errorEmbed], ephemeral: true })
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ embeds: [errorEmbed] })
+        } else {
+          await interaction.reply({ embeds: [errorEmbed], ephemeral: true })
+        }
+      } catch (replyError) {
+        console.error('Failed to send error message:', replyError)
+      }
     }
   }
 })
 
 // Handle regular messages (for users typing /verify [code] as text)
 client.on('messageCreate', async message => {
-  // Ignore bot messages and non-DM messages
+  // Ignore bot messages
   if (message.author.bot) return
-  if (message.guild) return // Only handle DMs
-
+  
+  // Only handle DMs or commands that start with /verify
   const content = message.content.trim()
   
   // Check for /verify command pattern
@@ -405,7 +413,7 @@ client.on('messageCreate', async message => {
   const verifyMatch = content.match(/^\/verify\s+(\d+)$/i)
   if (verifyMatch) {
     const code = verifyMatch[1]
-    console.log(`📝 Received /verify command via DM from ${message.author.tag} with code: ${code}`)
+    console.log(`📝 Received /verify command via message from ${message.author.tag} with code: ${code}`)
     
     try {
       // Send typing indicator
@@ -415,19 +423,11 @@ client.on('messageCreate', async message => {
       let replyMessage: any = null
       const fakeInteraction = {
         user: message.author,
-        reply: async (options: any) => {
-          if (options.embeds) {
-            replyMessage = await message.reply({ embeds: options.embeds, components: options.components })
-          } else if (options.content) {
-            replyMessage = await message.reply({ content: options.content })
-          }
-        },
+        guild: null, // DMs don't have guilds
         deferReply: async (options: any) => {
-          // Send a typing indicator (already sent above, but this is for compatibility)
           await message.channel.sendTyping()
         },
         editReply: async (options: any) => {
-          // For editReply, send a new message if we don't have a reply yet
           if (!replyMessage) {
             if (options.embeds) {
               replyMessage = await message.reply({ embeds: options.embeds, components: options.components })
@@ -435,7 +435,6 @@ client.on('messageCreate', async message => {
               replyMessage = await message.reply({ content: options.content })
             }
           } else {
-            // Try to edit the existing message
             try {
               if (options.embeds) {
                 await replyMessage.edit({ embeds: options.embeds, components: options.components })
@@ -443,7 +442,6 @@ client.on('messageCreate', async message => {
                 await replyMessage.edit({ content: options.content })
               }
             } catch (editError) {
-              // If edit fails, send a new message
               if (options.embeds) {
                 await message.reply({ embeds: options.embeds, components: options.components })
               } else if (options.content) {
@@ -463,26 +461,6 @@ client.on('messageCreate', async message => {
         .setDescription('Something went wrong processing your verification code. Please try again.')
       
       await message.reply({ embeds: [errorEmbed] })
-    }
-    return
-  }
-
-  // Check for /help command pattern
-  if (content.match(/^\/help$/i)) {
-    try {
-      const fakeInteraction = {
-        user: message.author,
-        reply: async (options: any) => {
-          if (options.embeds) {
-            await message.reply({ embeds: options.embeds, components: options.components })
-          } else if (options.content) {
-            await message.reply({ content: options.content })
-          }
-        }
-      }
-      await handleHelp(fakeInteraction)
-    } catch (error) {
-      console.error('Error handling help command from message:', error)
     }
     return
   }
@@ -537,11 +515,49 @@ async function handleRegister(interaction: any) {
 }
 
 async function handleVerify(interaction: any, code: string) {
+  // Defer reply immediately (works in both DMs and guilds)
   await interaction.deferReply({ ephemeral: true })
 
-  const token = await getUserToken(interaction.user.id, code)
+  console.log(`[Verify] Attempting verification for user ${interaction.user.tag} with code: ${code}`)
+  console.log(`[Verify] In guild: ${!!interaction.guild}`)
 
-  if (!token) {
+  try {
+    // Call the backend API to verify
+    const response = await api.client.post('/api/auth/discord', {
+      discordId: interaction.user.id,
+      verificationCode: code,
+    })
+
+    console.log(`[Verify] Backend response received:`, response.data)
+
+    if (!response.data || !response.data.token) {
+      throw new Error('Invalid response from server')
+    }
+
+    // Success embed
+    const embed = new EmbedBuilder()
+      .setColor(0x10b981)
+      .setTitle('✅ Discord Linked!')
+      .setDescription(
+        `Welcome to Senergy, ${interaction.user.username}!\n\n` +
+        '**You can now:**\n' +
+        '• View your profile with `/profile`\n' +
+        '• Rate places with `/rate`\n' +
+        '• Create groups with `/group create`\n' +
+        '• Find your squad with `/find-squad`'
+      )
+      .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
+      .setFooter({ text: 'Use /help to see all commands' })
+      .setTimestamp()
+
+    await interaction.editReply({ embeds: [embed] })
+    console.log(`[Verify] Success message sent`)
+
+  } catch (error: any) {
+    console.error('[Verify] Verification failed:', error)
+    console.error('[Verify] Error details:', error.response?.data || error.message)
+
+    // Error embed
     const embed = new EmbedBuilder()
       .setColor(0xef4444)
       .setTitle('❌ Verification Failed')
@@ -550,7 +566,11 @@ async function handleVerify(interaction: any, code: string) {
         '• Invalid or expired code\n' +
         '• You haven\'t completed the quiz yet\n' +
         '• Code was already used\n\n' +
-        'Get a new code by completing the personality quiz.'
+        '**To fix this:**\n' +
+        '1. Go to the web app\n' +
+        '2. Complete the personality quiz\n' +
+        '3. Get your new verification code\n' +
+        '4. Use `/verify [code]` here or in my DMs'
       )
 
     const button = new ActionRowBuilder<ButtonBuilder>()
@@ -562,24 +582,8 @@ async function handleVerify(interaction: any, code: string) {
       )
 
     await interaction.editReply({ embeds: [embed], components: [button] })
-    return
+    console.log(`[Verify] Error message sent`)
   }
-
-  const embed = new EmbedBuilder()
-    .setColor(0x10b981)
-    .setTitle('✅ Discord Linked!')
-    .setDescription(
-      `Welcome to Senergy, ${interaction.user.username}!\n\n` +
-      '**You can now:**\n' +
-      '• View your profile with `/profile`\n' +
-      '• Rate places with `/rate`\n' +
-      '• Create groups with `/group create`\n' +
-      '• Find your squad with `/find-squad`'
-    )
-    .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
-    .setFooter({ text: 'Use /help to see all commands' })
-
-  await interaction.editReply({ embeds: [embed] })
 }
 
 async function handleProfile(interaction: any) {
