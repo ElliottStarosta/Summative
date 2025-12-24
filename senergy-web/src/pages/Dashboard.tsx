@@ -413,35 +413,7 @@ export const Dashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Temporary test button */}
-        <button
-          onClick={async () => {
-            const testDiscordId = prompt('Enter any Discord ID to test (or type "test"):')
-            if (!testDiscordId) return
-
-            try {
-              // Link the Discord ID
-              const token = localStorage.getItem('token');
-              if (!token) {
-                alert('User not logged in or token missing!');
-                return;
-              }
-              await axios.post('/api/auth/discord/link',
-                { discordId: testDiscordId },
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-
-              alert('Discord ID linked! Now take the quiz again.');
-              navigate('/quiz');
-            } catch (error) {
-              alert('Failed to link Discord ID')
-            }
-              
-          }}
-          className="px-4 py-2 rounded-xl bg-purple-600 text-white font-semibold"
-        >
-          🧪 Test Discord Link
-        </button>
+        
       </main>
     </div>
   )

@@ -29,9 +29,30 @@ export class SenergyAPI {
   }
 
   /**
+ * Get authentication token for a Discord user
+ */
+async getUserToken(discordId: string): Promise<string | null> {
+  try {
+    const response = await this.client.post('/api/auth/discord', {
+      discordId,
+    })
+    return response.data.token
+  } catch (error: any) {
+    console.error('Get user token error:', error)
+    return null
+  }
+}
+
+  /**
    * Create a group
    */
-  async createGroup(token: string, memberIds: string[], searchLocation: any, city: string) {
+  async createGroup(
+    token: string,
+    memberIds: string[],
+    searchLocation: { lat: number; lng: number },
+    city: string,
+    discordChannelId?: string
+  ) {
     try {
       const response = await this.client.post(
         '/api/groups',
@@ -40,6 +61,7 @@ export class SenergyAPI {
           searchLocation,
           city,
           searchRadius: 15,
+          discordChannelId, // Store Discord channel ID for sync
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -84,7 +106,7 @@ export class SenergyAPI {
     try {
       const response = await this.client.post(
         `/api/groups/${groupId}/recommend`,
-        {},
+        { searchRadius: 15 },
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -180,7 +202,8 @@ export class SenergyAPI {
       const response = await this.client.get(`/api/users/discord/${discordId}/profile`)
       return response.data.data
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || 'Failed to fetch profile')
+      console.error('Get profile error:', error)
+      return null
     }
   }
 

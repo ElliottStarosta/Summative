@@ -13,6 +13,16 @@ import {
 } from 'discord.js'
 import dotenv from 'dotenv'
 import { api } from './services/api'
+import {
+  command as groupCommand,
+  execute as executeGroupCommand,
+  handleAddMembers,
+  handleGenerateRecommendations,
+  handleVote,
+  handleVoteSelect,
+  handleViewResults,
+  handleCancel
+} from './commands/group'
 
 dotenv.config()
 
@@ -37,6 +47,7 @@ export const client = new Client({
     Partials.Message,
   ],
 })
+
 // ============================================
 // COMMAND REGISTRY
 // ============================================
@@ -161,16 +172,13 @@ export async function registerCommands() {
 
     console.log(`Started refreshing ${commands.length} application commands...`)
 
-    // Register globally or in specific guild
     if (GUILD_ID) {
-      // For testing - register in specific server (instant)
       await rest.put(
         Routes.applicationGuildCommands(CLIENT_ID!, GUILD_ID),
         { body: commands }
       )
       console.log(`✅ Registered commands in guild ${GUILD_ID}`)
     } else {
-      // Register globally (takes up to 1 hour to propagate)
       await rest.put(
         Routes.applicationCommands(CLIENT_ID!),
         { body: commands }
@@ -189,8 +197,13 @@ export async function registerCommands() {
 
 client.on('ready', () => {
   console.log(`✅ Bot logged in as ${client.user?.tag}`)
+  
+  // Generate invite link
+  const inviteLink = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&permissions=8&scope=bot%20applications.commands`
+  console.log(`🔗 Bot invite link: ${inviteLink}`)
+  
   if (client.user) {
-    client.user.setActivity('for /help', { type: ActivityType.Watching })
+    client.user.setActivity('Use /group to plan!', { type: ActivityType.Playing })
   }
 })
 
@@ -208,8 +221,8 @@ client.on('guildCreate', async (guild: any) => {
           '**Quick Start:**\n' +
           '• Use `/register` to create your account\n' +
           '• Take the personality quiz\n' +
-          '• Use `/verify` with your code\n' +
-          '• Start finding your perfect spots!'
+          '• Use `/group [location]` to plan with friends\n' +
+          '• Rate places and get better recommendations!'
         )
         .setFooter({ text: 'Use /help to see all commands' })
         .setTimestamp()
@@ -358,12 +371,14 @@ client.on('interactionCreate', async interaction => {
         await handleStats(interaction)
       } else if (commandName === 'rate') {
         await handleRate(interaction, options.getString('place_name')!)
-      } else if (commandName === 'group') {
-        await handleGroupCommand(interaction, options.getSubcommand())
+
       } else if (commandName === 'find-squad') {
         await handleFindSquad(interaction, options.getInteger('distance'))
       } else if (commandName === 'help') {
         await handleHelp(interaction)
+      } else if (commandName === 'group') {
+        const groupCommand = await import('./commands/group')
+        await groupCommand.execute(interaction)
       }
     } catch (error) {
       console.error(`Error: ${commandName}:`, error)
@@ -381,6 +396,59 @@ client.on('interactionCreate', async interaction => {
       } catch (replyError) {
         console.error('Failed to send error message:', replyError)
       }
+    }
+  }
+
+  if (interaction.isButton()) {
+    try {
+      const customId = interaction.customId
+
+      // Group Feature Buttons
+      if (customId === 'group_add_members') {
+        await handleAddMembers(interaction)
+      } 
+      else if (customId === 'group_generate_recs') {
+        await handleGenerateRecommendations(interaction)
+      } 
+      else if (customId === 'group_vote') {
+        await handleVote(interaction)
+      } 
+      else if (customId === 'group_view_results') {
+        await handleViewResults(interaction)
+      } 
+      else if (customId === 'group_cancel') {
+        await handleCancel(interaction)
+      }
+      else if (customId === 'group_rate_after') {
+        // Handle "Rate This Place Later" button
+        await interaction.reply({
+          content: `⭐ You can rate places at ${process.env.FRONTEND_URL || 'http://localhost:5173'}/rate`,
+          ephemeral: true
+        })
+      }
+    } catch (error) {
+      console.error('Button interaction error:', error)
+      await interaction.reply({
+        content: '❌ Failed to process button interaction',
+        ephemeral: true
+      }).catch(console.error)
+    }
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    try {
+      const customId = interaction.customId
+
+      // Group Voting Select Menus
+      if (customId.startsWith('group_vote_select_')) {
+        await handleVoteSelect(interaction)
+      }
+    } catch (error) {
+      console.error('Select menu interaction error:', error)
+      await interaction.reply({
+        content: '❌ Failed to process selection',
+        ephemeral: true
+      }).catch(console.error)
     }
   }
 })
@@ -748,166 +816,166 @@ async function handleRate(interaction: any, placeName: string) {
   await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
 }
 
-async function handleGroupCommand(interaction: any, subcommand: string) {
-  const token = await getUserToken(interaction.user.id)
+// async function handleGroupCommand(interaction: any, subcommand: string) {
+//   const token = await getUserToken(interaction.user.id)
 
-  if (!token) {
-    const embed = new EmbedBuilder()
-      .setColor(0xf59e0b)
-      .setTitle('🔒 Account Not Linked')
-      .setDescription('Link your account to use group features.')
+//   if (!token) {
+//     const embed = new EmbedBuilder()
+//       .setColor(0xf59e0b)
+//       .setTitle('🔒 Account Not Linked')
+//       .setDescription('Link your account to use group features.')
 
-    await interaction.reply({ embeds: [embed], ephemeral: true })
-    return
-  }
+//     await interaction.reply({ embeds: [embed], ephemeral: true })
+//     return
+//   }
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+//   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 
-  if (subcommand === 'create') {
-    const location = interaction.options.getString('location')
+//   if (subcommand === 'create') {
+//     const location = interaction.options.getString('location')
     
-    const embed = new EmbedBuilder()
-      .setColor(0x10b981)
-      .setTitle('👥 Create Your Group')
-      .setDescription(
-        `Planning for **${location}**\n\n` +
-        '**On the web app, you can:**\n' +
-        '• Add friends to your group\n' +
-        '• Get AI recommendations\n' +
-        '• Vote with ranked choice\n' +
-        '• Finalize your plans'
-      )
-      .setFooter({ text: 'Click below to set up your group' })
+//     const embed = new EmbedBuilder()
+//       .setColor(0x10b981)
+//       .setTitle('👥 Create Your Group')
+//       .setDescription(
+//         `Planning for **${location}**\n\n` +
+//         '**On the web app, you can:**\n' +
+//         '• Add friends to your group\n' +
+//         '• Get AI recommendations\n' +
+//         '• Vote with ranked choice\n' +
+//         '• Finalize your plans'
+//       )
+//       .setFooter({ text: 'Click below to set up your group' })
 
-    const button = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(
-        new ButtonBuilder()
-          .setLabel('Create Group')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${frontendUrl}/groups`)
-      )
+//     const button = new ActionRowBuilder<ButtonBuilder>()
+//       .addComponents(
+//         new ButtonBuilder()
+//           .setLabel('Create Group')
+//           .setStyle(ButtonStyle.Link)
+//           .setURL(`${frontendUrl}/groups`)
+//       )
 
-    await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
-  } else if (subcommand === 'recommend') {
-    await interaction.deferReply()
+//     await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
+//   } else if (subcommand === 'recommend') {
+//     await interaction.deferReply()
 
-    try {
-      const groups = await api.getUserGroups(token)
+//     try {
+//       const groups = await api.getUserGroups(token)
       
-      if (groups.length === 0) {
-        const embed = new EmbedBuilder()
-          .setColor(0xf59e0b)
-          .setTitle('📭 No Active Groups')
-          .setDescription('Create a group first with `/group create`')
+//       if (groups.length === 0) {
+//         const embed = new EmbedBuilder()
+//           .setColor(0xf59e0b)
+//           .setTitle('📭 No Active Groups')
+//           .setDescription('Create a group first with `/group create`')
 
-        await interaction.editReply({ embeds: [embed] })
-        return
-      }
+//         await interaction.editReply({ embeds: [embed] })
+//         return
+//       }
 
-      const activeGroup = groups[0]
-      const recommendations = await api.generateRecommendations(token, activeGroup.id)
+//       const activeGroup = groups[0]
+//       const recommendations = await api.generateRecommendations(token, activeGroup.id)
 
-      if (recommendations.length === 0) {
-        const embed = new EmbedBuilder()
-          .setColor(0xef4444)
-          .setTitle('🤷 No Recommendations')
-          .setDescription('Try adjusting your location or adding more members.')
+//       if (recommendations.length === 0) {
+//         const embed = new EmbedBuilder()
+//           .setColor(0xef4444)
+//           .setTitle('🤷 No Recommendations')
+//           .setDescription('Try adjusting your location or adding more members.')
 
-        await interaction.editReply({ embeds: [embed] })
-        return
-      }
+//         await interaction.editReply({ embeds: [embed] })
+//         return
+//       }
 
-      const top3 = recommendations.slice(0, 3)
+//       const top3 = recommendations.slice(0, 3)
       
-      const embed = new EmbedBuilder()
-        .setColor(0x6366f1)
-        .setTitle('🎯 Top Recommendations')
-        .setDescription('Based on your group\'s personality profile')
-        .addFields(
-          top3.map((rec: any, idx: number) => ({
-            name: `${['🥇', '🥈', '🥉'][idx]} ${rec.placeName}`,
-            value: `**${rec.predictedScore}/10** • ${rec.reasoning}`,
-            inline: false
-          }))
-        )
-        .setFooter({ text: 'Use /group vote to cast your votes!' })
+//       const embed = new EmbedBuilder()
+//         .setColor(0x6366f1)
+//         .setTitle('🎯 Top Recommendations')
+//         .setDescription('Based on your group\'s personality profile')
+//         .addFields(
+//           top3.map((rec: any, idx: number) => ({
+//             name: `${['🥇', '🥈', '🥉'][idx]} ${rec.placeName}`,
+//             value: `**${rec.predictedScore}/10** • ${rec.reasoning}`,
+//             inline: false
+//           }))
+//         )
+//         .setFooter({ text: 'Use /group vote to cast your votes!' })
 
-      await interaction.editReply({ embeds: [embed] })
-    } catch (error) {
-      const embed = new EmbedBuilder()
-        .setColor(0xef4444)
-        .setTitle('❌ Error')
-        .setDescription('Could not generate recommendations.')
+//       await interaction.editReply({ embeds: [embed] })
+//     } catch (error) {
+//       const embed = new EmbedBuilder()
+//         .setColor(0xef4444)
+//         .setTitle('❌ Error')
+//         .setDescription('Could not generate recommendations.')
       
-      await interaction.editReply({ embeds: [embed] })
-    }
-  } else if (subcommand === 'vote') {
-    const embed = new EmbedBuilder()
-      .setColor(0x8b5cf6)
-      .setTitle('🗳️ Ranked Choice Voting')
-      .setDescription(
-        'Vote for your top 3 places in order of preference.\n\n' +
-        'Use the web app for the full voting experience!'
-      )
+//       await interaction.editReply({ embeds: [embed] })
+//     }
+//   } else if (subcommand === 'vote') {
+//     const embed = new EmbedBuilder()
+//       .setColor(0x8b5cf6)
+//       .setTitle('🗳️ Ranked Choice Voting')
+//       .setDescription(
+//         'Vote for your top 3 places in order of preference.\n\n' +
+//         'Use the web app for the full voting experience!'
+//       )
 
-    const button = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(
-        new ButtonBuilder()
-          .setLabel('Vote Now')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${frontendUrl}/groups`)
-      )
+//     const button = new ActionRowBuilder<ButtonBuilder>()
+//       .addComponents(
+//         new ButtonBuilder()
+//           .setLabel('Vote Now')
+//           .setStyle(ButtonStyle.Link)
+//           .setURL(`${frontendUrl}/groups`)
+//       )
 
-    await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
-  } else if (subcommand === 'history') {
-    await interaction.deferReply({ ephemeral: true })
+//     await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
+//   } else if (subcommand === 'history') {
+//     await interaction.deferReply({ ephemeral: true })
 
-    try {
-      const groups = await api.getUserGroups(token)
+//     try {
+//       const groups = await api.getUserGroups(token)
       
-      if (groups.length === 0) {
-        const embed = new EmbedBuilder()
-          .setColor(0xf59e0b)
-          .setTitle('📜 No Group History')
-          .setDescription('Create your first group with `/group create`')
+//       if (groups.length === 0) {
+//         const embed = new EmbedBuilder()
+//           .setColor(0xf59e0b)
+//           .setTitle('📜 No Group History')
+//           .setDescription('Create your first group with `/group create`')
 
-        await interaction.editReply({ embeds: [embed] })
-        return
-      }
+//         await interaction.editReply({ embeds: [embed] })
+//         return
+//       }
 
-      const embed = new EmbedBuilder()
-        .setColor(0x6366f1)
-        .setTitle('📜 Your Group History')
-        .setDescription(
-          groups.slice(0, 5).map((group: any) => {
-            const place = group.finalPlace
-            const status = group.status === 'place_selected' ? '✅' : '⏳'
-            return place 
-              ? `${status} **${place.placeName}**`
-              : `${status} Group in ${group.city || 'Unknown'}`
-          }).join('\n')
-        )
-        .setFooter({ text: `Showing ${Math.min(groups.length, 5)} of ${groups.length} groups` })
+//       const embed = new EmbedBuilder()
+//         .setColor(0x6366f1)
+//         .setTitle('📜 Your Group History')
+//         .setDescription(
+//           groups.slice(0, 5).map((group: any) => {
+//             const place = group.finalPlace
+//             const status = group.status === 'place_selected' ? '✅' : '⏳'
+//             return place 
+//               ? `${status} **${place.placeName}**`
+//               : `${status} Group in ${group.city || 'Unknown'}`
+//           }).join('\n')
+//         )
+//         .setFooter({ text: `Showing ${Math.min(groups.length, 5)} of ${groups.length} groups` })
 
-      const button = new ActionRowBuilder<ButtonBuilder>()
-        .addComponents(
-          new ButtonBuilder()
-            .setLabel('View Full History')
-            .setStyle(ButtonStyle.Link)
-            .setURL(`${frontendUrl}/groups`)
-        )
+//       const button = new ActionRowBuilder<ButtonBuilder>()
+//         .addComponents(
+//           new ButtonBuilder()
+//             .setLabel('View Full History')
+//             .setStyle(ButtonStyle.Link)
+//             .setURL(`${frontendUrl}/groups`)
+//         )
 
-      await interaction.editReply({ embeds: [embed], components: [button] })
-    } catch (error) {
-      const embed = new EmbedBuilder()
-        .setColor(0xef4444)
-        .setTitle('❌ Error')
-        .setDescription('Could not fetch history.')
+//       await interaction.editReply({ embeds: [embed], components: [button] })
+//     } catch (error) {
+//       const embed = new EmbedBuilder()
+//         .setColor(0xef4444)
+//         .setTitle('❌ Error')
+//         .setDescription('Could not fetch history.')
       
-      await interaction.editReply({ embeds: [embed] })
-    }
-  }
-}
+//       await interaction.editReply({ embeds: [embed] })
+//     }
+//   }
+// }
 
 async function handleFindSquad(interaction: any, distance: number | null) {
   await interaction.deferReply({ ephemeral: true })
